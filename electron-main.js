@@ -1,24 +1,30 @@
-const { app, BrowserWindow, ipcMain, dialog } = require('electron')
+const { app, BrowserWindow, ipcMain, dialog, nativeTheme } = require('electron')
 const path = require('path')
 const fs = require('fs')
 const { exec } = require('child_process')
 
+let mainWindow
+
 function createWindow() {
-  const win = new BrowserWindow({
+  mainWindow = new BrowserWindow({
     width: 1250,
     height: 850,
+    frame: false,
+    titleBarStyle: 'hidden',
     webPreferences: {
       nodeIntegration: true,
       contextIsolation: false,
       webSecurity: false
     },
-    autoHideMenuBar: true
+    autoHideMenuBar: true,
+    minWidth: 900,
+    minHeight: 600
   })
 
   if (process.env.NODE_ENV === 'development' || !app.isPackaged) {
-    win.loadURL('http://localhost:5173')
+    mainWindow.loadURL('http://localhost:5173')
   } else {
-    win.loadFile(path.join(__dirname, 'dist/index.html'))
+    mainWindow.loadFile(path.join(__dirname, 'dist/index.html'))
   }
 }
 
@@ -37,6 +43,15 @@ app.on('window-all-closed', () => {
     app.quit()
   }
 })
+
+ipcMain.on('window-minimize', () => { if (mainWindow) mainWindow.minimize() })
+ipcMain.on('window-maximize', () => {
+  if (!mainWindow) return
+  if (mainWindow.isMaximized()) mainWindow.unmaximize()
+  else mainWindow.maximize()
+})
+ipcMain.on('window-close', () => { if (mainWindow) mainWindow.close() })
+ipcMain.handle('window-is-maximized', () => mainWindow ? mainWindow.isMaximized() : false)
 
 // UTAU/Vocaloid Voice Changer IPC Handlers
 async function synthesize(text, vbPath, speed, pitch, notes, base_freq) {

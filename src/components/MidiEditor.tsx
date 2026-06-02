@@ -1,4 +1,4 @@
-import React, { useRef } from 'react'
+import React, { useRef, useState } from 'react'
 
 interface MidiEditorProps {
   tracks: any[]
@@ -8,6 +8,7 @@ interface MidiEditorProps {
   timeSig: string
   onAddMidiEvent: (ev: any) => void
   onUpdateMidiEvent: (id: string, updatedData: any) => void
+  onUpdateMidiEvents: (updates: { id: string, updatedData: any }[]) => void
   onDeleteMidiEvent: (id: string) => void
 }
 
@@ -19,9 +20,11 @@ export default function MidiEditor({
   timeSig,
   onAddMidiEvent,
   onUpdateMidiEvent,
+  onUpdateMidiEvents,
   onDeleteMidiEvent
 }: MidiEditorProps) {
   const gridRef = useRef<HTMLDivElement>(null)
+  const [selectedNoteIds, setSelectedNoteIds] = useState<Set<string>>(new Set())
 
   const pitches = Array.from({ length: 25 }, (_, i) => 72 - i)
 
@@ -75,14 +78,43 @@ export default function MidiEditor({
     })
   }
 
+  const activeNotes = midiEvents.filter(ev => ev.trackId === activeTrackId && ev.data && typeof ev.data.freq === 'number')
+
   const handleNoteMouseDown = (e: React.MouseEvent<HTMLDivElement>, note: any) => {
     e.stopPropagation()
     e.preventDefault()
+
+    let nextSelection = new Set(selectedNoteIds)
+    if (e.ctrlKey) {
+      if (nextSelection.has(note.id)) {
+        nextSelection.delete(note.id)
+      } else {
+        nextSelection.add(note.id)
+      }
+    } else {
+      if (!nextSelection.has(note.id)) {
+        nextSelection = new Set([note.id])
+      }
+    }
+    setSelectedNoteIds(nextSelection)
+
     const startX = e.clientX
     const startY = e.clientY
-    const startTime = note.time
-    const initialFreq = note.data.freq
-    const initialPitch = Math.round(12 * Math.log2(initialFreq / 440) + 69)
+
+    const initialNotesState = activeNotes
+      .filter(n => nextSelection.has(n.id))
+      .map(n => {
+        const freq = n.data.freq
+        const pitch = Math.round(12 * Math.log2(freq / 440) + 69)
+        return {
+          id: n.id,
+          startTime: n.time,
+          initialFreq: freq,
+          initialPitch: pitch,
+          initialDuration: n.data.duration,
+          data: n.data
+        }
+      })
 
     const handleMouseMove = (moveEv: MouseEvent) => {
       const deltaX = moveEv.clientX - startX
@@ -97,20 +129,45 @@ export default function MidiEditor({
       else if (timeSig === '3/4') snapUnit = 0.75
       
       const snapDiv = beatDuration * snapUnit
-      const rawNewTime = startTime + deltaTime
-      const newTime = Math.max(0, Math.round(rawNewTime / snapDiv) * snapDiv)
 
-      const deltaPitch = -Math.round(deltaY / 20)
-      const newPitch = Math.max(48, Math.min(72, initialPitch + deltaPitch))
-      const newFreq = 440 * Math.pow(2, (newPitch - 69) / 12)
+      const isResizing = moveEv.shiftKey
 
-      onUpdateMidiEvent(note.id, {
-        time: newTime,
-        data: {
-          ...note.data,
-          freq: newFreq
+      const updates = initialNotesState.map(item => {
+        if (isResizing) {
+          const newDuration = Math.max(snapDiv, Math.round((item.initialDuration + deltaTime) / snapDiv) * snapDiv)
+          return {
+            id: item.id,
+            updatedData: {
+              data: {
+                ...item.data,
+                duration: newDuration
+              }
+            }
+          }
+        } else {
+          const rawNewTime = item.startTime + deltaTime
+          const newTime = Math.max(0, Math.round(rawNewTime / snapDiv) * snapDiv)
+
+          const deltaPitch = -Math.round(deltaY / 20)
+          const newPitch = Math.max(48, Math.min(72, item.initialPitch + deltaPitch))
+          const newFreq = 440 * Math.pow(2, (newPitch - 69) / 12)
+
+          return {
+            id: item.id,
+            updatedData: {
+              time: newTime,
+              data: {
+                ...item.data,
+                freq: newFreq
+              }
+            }
+          }
         }
       })
+
+      if (updates.length > 0) {
+        onUpdateMidiEvents(updates)
+      }
     }
 
     const handleMouseUp = () => {
@@ -121,8 +178,6 @@ export default function MidiEditor({
     document.addEventListener('mousemove', handleMouseMove)
     document.addEventListener('mouseup', handleMouseUp)
   }
-
-  const activeNotes = midiEvents.filter(ev => ev.trackId === activeTrackId && ev.data && typeof ev.data.freq === 'number')
 
   return (
     <div className="piano-roll-container">
@@ -142,6 +197,7 @@ export default function MidiEditor({
         ref={gridRef}
         className="pr-grid" 
         id="pr-grid"
+        onMouseDown={() => setSelectedNoteIds(new Set())}
         onDoubleClick={handleGridDoubleClick}
         style={{ height: `${pitches.length * 20}px` }}
       >
@@ -192,11 +248,12 @@ export default function MidiEditor({
           const beatDuration = 60 / bpm
           const noteLeft = (note.time / beatDuration) * 100
           const noteWidth = (note.data.duration / beatDuration) * 100
+          const isSelected = selectedNoteIds.has(note.id)
 
           return (
             <div 
               key={note.id}
-              className="pr-note"
+              className={`pr-note ${isSelected ? 'selected' : ''}`}
               onMouseDown={(e) => handleNoteMouseDown(e, note)}
               onClick={(e) => {
                 if (e.detail === 3 && isVocaloidTrack) {
@@ -235,7 +292,9 @@ export default function MidiEditor({
                 alignItems: 'center',
                 justifyContent: 'center',
                 background: isVocaloidTrack ? 'linear-gradient(90deg, #ff2e63, #ff6b8b)' : undefined,
-                boxShadow: isVocaloidTrack ? '0 2px 8px rgba(255, 46, 99, 0.4)' : undefined,
+                boxShadow: isSelected 
+                  ? '0 0 12px rgba(255, 255, 255, 0.6)' 
+                  : (isVocaloidTrack ? '0 2px 8px rgba(255, 46, 99, 0.4)' : undefined),
                 color: 'white',
                 fontSize: '10px',
                 fontWeight: 'bold',
@@ -243,7 +302,9 @@ export default function MidiEditor({
                 whiteSpace: 'nowrap',
                 textOverflow: 'ellipsis',
                 padding: '0 4px',
-                border: '1px solid rgba(255, 255, 255, 0.3)'
+                border: isSelected 
+                  ? '2px solid #ffffff' 
+                  : '1px solid rgba(255, 255, 255, 0.3)'
               }}
             >
               {isVocaloidTrack ? (note.data.lyric || 'a') : ''}

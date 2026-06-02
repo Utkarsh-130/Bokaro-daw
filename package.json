@@ -1,15 +1,21 @@
 {
-  "name": "mini-daw-studio",
+  "name": "Bokaro-daw",
   "version": "1.0.0",
-  "main": "electron-main.js",
+  "description": "A Vocaloid Voice Changer application",
+  "author": "User",
+  "main": "out/main/index.js",
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview",
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "preview": "electron-vite preview",
     "electron": "electron .",
-    "electron:dev": "concurrently \"npm run dev\" \"wait-on http://localhost:5173 && electron .\""
+    "electron:dev": "electron-vite dev",
+    "build:win": "electron-vite build && electron-builder --win",
+    "pack:win": "electron-vite build && electron-builder --win --dir"
   },
   "dependencies": {
+    "@electron-toolkit/preload": "^3.0.2",
+    "@electron-toolkit/utils": "^4.0.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },
@@ -19,6 +25,8 @@
     "@vitejs/plugin-react": "^4.3.1",
     "concurrently": "^8.2.2",
     "electron": "^30.0.9",
+    "electron-builder": "^26.8.1",
+    "electron-vite": "^5.0.0",
     "typescript": "^6.0.3",
     "vite": "^5.3.1",
     "wait-on": "^7.2.0"
