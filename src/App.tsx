@@ -651,6 +651,23 @@ export default function App() {
     }))
   }
 
+  const handleUpdateMidiEvents = (updates: { id: string, updatedData: any }[]) => {
+    setMidiEvents(prev => prev.map(ev => {
+      const match = updates.find(u => u.id === ev.id)
+      if (match) {
+        return {
+          ...ev,
+          ...match.updatedData,
+          data: {
+            ...ev.data,
+            ...(match.updatedData.data || {})
+          }
+        }
+      }
+      return ev
+    }))
+  }
+
   const handleDeleteMidiEvent = (noteId: string) => {
     pushUndo()
     setMidiEvents(prev => prev.filter(ev => ev.id !== noteId))
@@ -1305,6 +1322,7 @@ export default function App() {
             timeSig={timeSig}
             onAddMidiEvent={handleAddMidiEvent}
             onUpdateMidiEvent={handleUpdateMidiEvent}
+            onUpdateMidiEvents={handleUpdateMidiEvents}
             onDeleteMidiEvent={handleDeleteMidiEvent}
           />
         )}
@@ -1391,6 +1409,13 @@ export default function App() {
             <span className="modal-item-desc">Make vertical grid subdivisions easier to see</span>
           </div>
           <i className="bx bx-grid-alt modal-item-action" />
+        </div>
+        <div className="modal-item" onClick={() => { setActiveModal(null); setActiveTab(activeTab ? '' : 'instrument'); }}>
+          <div className="modal-item-info">
+            <span className="modal-item-title">{activeTab ? 'Hide Bottom Panel' : 'Show Bottom Panel'}</span>
+            <span className="modal-item-desc">Toggle the bottom editor and settings panel visibility</span>
+          </div>
+          <i className="bx bx-dock-bottom modal-item-action" />
         </div>
       </Modal>
 
