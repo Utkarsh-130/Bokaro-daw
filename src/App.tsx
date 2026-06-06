@@ -7,6 +7,7 @@ import InstrumentPanel from './components/InstrumentPanel.tsx'
 import FxPanel from './components/FxPanel.tsx'
 import MidiEditor from './components/MidiEditor.tsx'
 import Modal from './components/Modal.tsx'
+import TitleBar from './components/TitleBar.tsx'
 
 interface Track {
   id: string
@@ -1216,6 +1217,7 @@ export default function App() {
 
   return (
     <div className="daw-container">
+      <TitleBar />
       <TopBar 
         projectTitle={projectTitle}
         setProjectTitle={setProjectTitle}

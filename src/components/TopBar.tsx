@@ -112,12 +112,6 @@ export default function TopBar({
           style={{ color: isRecording ? 'red' : '' }} 
           onClick={onRecordToggle}
         />
-        <i 
-          className={isMetronomeOn ? "bx bx-pulse bx-pulse-active" : "bx bx-pulse"} 
-          id="metronome-btn"
-          onClick={onMetronomeToggle}
-          style={{ color: isMetronomeOn ? 'var(--accent)' : '', fontSize: '20px', cursor: 'pointer', marginLeft: '8px' }}
-        />
       </div>
 
       <div className="time-display">
@@ -125,6 +119,19 @@ export default function TopBar({
       </div>
 
       <div className="project-settings">
+        <button 
+          className="btn" 
+          onClick={onMetronomeToggle}
+          style={{ 
+            background: isMetronomeOn ? 'var(--accent-glow)' : 'var(--bg-card)',
+            color: isMetronomeOn ? 'var(--accent)' : 'var(--text-muted)',
+            borderColor: isMetronomeOn ? 'var(--accent)' : 'var(--border)',
+            marginRight: '8px'
+          }}
+          title="Toggle Metronome"
+        >
+          <i className="bx bx-pulse" /> Metronome
+        </button>
         <div className="setting-box">
           <select 
             value={projectKey} 

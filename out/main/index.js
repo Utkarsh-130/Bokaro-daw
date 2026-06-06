@@ -97,10 +97,23 @@ electron.app.whenReady().then(() => {
 electron.app.on("window-all-closed", () => {
   if (process.platform !== "darwin") electron.app.quit();
 });
-electron.ipcMain.on("close-window", () => electron.app.quit());
-electron.ipcMain.on("minimize-window", (event) => {
+electron.ipcMain.on("window-close", (event) => {
+  const win = electron.BrowserWindow.fromWebContents(event.sender);
+  win?.close();
+});
+electron.ipcMain.on("window-minimize", (event) => {
   const win = electron.BrowserWindow.fromWebContents(event.sender);
   win?.minimize();
+});
+electron.ipcMain.on("window-maximize", (event) => {
+  const win = electron.BrowserWindow.fromWebContents(event.sender);
+  if (!win) return;
+  if (win.isMaximized()) win.unmaximize();
+  else win.maximize();
+});
+electron.ipcMain.handle("window-is-maximized", (event) => {
+  const win = electron.BrowserWindow.fromWebContents(event.sender);
+  return win ? win.isMaximized() : false;
 });
 electron.ipcMain.handle("save-file", async (_event, filePath) => {
   const { dialog } = require("electron");

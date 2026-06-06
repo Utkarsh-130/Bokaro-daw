@@ -80,10 +80,23 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()
 })
 
-ipcMain.on('close-window', () => app.quit())
-ipcMain.on('minimize-window', (event) => {
+ipcMain.on('window-close', (event) => {
+  const win = BrowserWindow.fromWebContents(event.sender)
+  win?.close()
+})
+ipcMain.on('window-minimize', (event) => {
   const win = BrowserWindow.fromWebContents(event.sender)
   win?.minimize()
+})
+ipcMain.on('window-maximize', (event) => {
+  const win = BrowserWindow.fromWebContents(event.sender)
+  if (!win) return
+  if (win.isMaximized()) win.unmaximize()
+  else win.maximize()
+})
+ipcMain.handle('window-is-maximized', (event) => {
+  const win = BrowserWindow.fromWebContents(event.sender)
+  return win ? win.isMaximized() : false
 })
 
 ipcMain.handle('save-file', async (_event, filePath: string) => {

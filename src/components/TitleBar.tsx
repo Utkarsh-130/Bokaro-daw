@@ -1,7 +1,15 @@
 import React, { useState, useEffect } from 'react'
 
-const { ipcRenderer } = window.require ? window.require('electron') : { ipcRenderer: null }
-
+const getIpcRenderer = () => {
+  if (typeof window !== 'undefined' && (window as any).electron) {
+    return (window as any).electron.ipcRenderer
+  }
+  if (typeof window !== 'undefined' && (window as any).require) {
+    return (window as any).require('electron').ipcRenderer
+  }
+  return null
+}
+const ipcRenderer = getIpcRenderer()
 export default function TitleBar() {
   const [isMaximized, setIsMaximized] = useState(false)
 
