@@ -18,8 +18,29 @@ async function synthesize(text: string, vbPath: string, speed: number, pitch: nu
     });
 }
 
+let customVocaloidFolder = '';
+
+ipcMain.handle('set-vocaloid-folder', async (_, folderPath) => {
+  customVocaloidFolder = folderPath;
+  return true;
+});
+
+ipcMain.handle('select-vocaloid-folder', async () => {
+  const { dialog } = require('electron');
+  const result = await dialog.showOpenDialog({
+    properties: ['openDirectory'],
+    title: 'Select UTAU/Vocaloid Voicebanks Directory'
+  });
+  if (!result.canceled && result.filePaths.length > 0) {
+    customVocaloidFolder = result.filePaths[0];
+    return customVocaloidFolder;
+  }
+  return null;
+});
+
 ipcMain.handle('generate-tts', async (_, { text, model, speed, pitch }) => {
-    let vbPath = resolve(process.cwd(), model);
+    const searchDir = customVocaloidFolder || process.cwd();
+    let vbPath = resolve(searchDir, model);
     const subs = ['重音テト音声ライブラリー/重音テト英語音源', '重音テト音声ライブラリー/重音テト単独音'];
     for (const s of subs) {
         const p = resolve(vbPath, s);
@@ -29,7 +50,8 @@ ipcMain.handle('generate-tts', async (_, { text, model, speed, pitch }) => {
 });
 
 ipcMain.handle('list-models', async () => {
-    return fs.readdirSync(process.cwd(), { withFileTypes: true })
+    const searchDir = customVocaloidFolder || process.cwd();
+    return fs.readdirSync(searchDir, { withFileTypes: true })
         .filter(d => d.isDirectory() && !d.name.startsWith('.') && d.name !== 'node_modules' && d.name !== 'src' && d.name !== 'out')
         .map(d => d.name);
 });

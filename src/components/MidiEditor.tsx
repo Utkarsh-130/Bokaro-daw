@@ -53,9 +53,11 @@ export default function MidiEditor({
     const rawTime = (clickX / 100) * beatDuration
 
     let snapUnit = 1.0
-    if (timeSig === '1/4') snapUnit = 0.25
+    if (timeSig === '1/2') snapUnit = 0.5
+    else if (timeSig === '1/4') snapUnit = 0.25
     else if (timeSig === '1/8') snapUnit = 0.125
-    else if (timeSig === '3/4') snapUnit = 0.75
+    else if (timeSig === '1') snapUnit = 1.0
+    else if (timeSig === 'Off') snapUnit = 0.001
     
     const snapDiv = beatDuration * snapUnit
     const snappedTime = Math.round(rawTime / snapDiv) * snapDiv
@@ -124,9 +126,11 @@ export default function MidiEditor({
       const deltaTime = (deltaX / 100) * beatDuration
 
       let snapUnit = 1.0
-      if (timeSig === '1/4') snapUnit = 0.25
+      if (timeSig === '1/2') snapUnit = 0.5
+      else if (timeSig === '1/4') snapUnit = 0.25
       else if (timeSig === '1/8') snapUnit = 0.125
-      else if (timeSig === '3/4') snapUnit = 0.75
+      else if (timeSig === '1') snapUnit = 1.0
+      else if (timeSig === 'Off') snapUnit = 0.001
       
       const snapDiv = beatDuration * snapUnit
 
@@ -215,11 +219,20 @@ export default function MidiEditor({
 
         {Array.from({ length: 16 * 8 }).map((_, subIdx) => {
           const isBeat = subIdx % 8 === 0
-          const isQuarter = subIdx % 2 === 0
+          const isHalfBeat = subIdx % 4 === 0
+          const isQuarterBeat = subIdx % 2 === 0
+          const isEighthBeat = true
           const leftPx = subIdx * 12.5
           
-          if (!isBeat && !isQuarter && timeSig !== '1/8') return null
-          if (!isBeat && isQuarter && timeSig !== '1/4' && timeSig !== '1/8') return null
+          let shouldRender = false
+          if (timeSig === '1') shouldRender = isBeat
+          else if (timeSig === '1/2') shouldRender = isHalfBeat
+          else if (timeSig === '1/4') shouldRender = isQuarterBeat
+          else if (timeSig === '1/8') shouldRender = isEighthBeat
+          else if (timeSig === 'Off') shouldRender = false
+          else shouldRender = isQuarterBeat
+          
+          if (!shouldRender) return null
           
           return (
             <div 
@@ -232,8 +245,8 @@ export default function MidiEditor({
                 width: '1px',
                 borderLeft: isBeat 
                   ? '1px solid rgba(255, 255, 255, 0.1)' 
-                  : isQuarter 
-                    ? '1px solid rgba(255, 255, 255, 0.04)' 
+                  : isHalfBeat
+                    ? '1px solid rgba(255, 255, 255, 0.05)'
                     : '1px dotted rgba(255, 255, 255, 0.02)',
                 pointerEvents: 'none'
               }}

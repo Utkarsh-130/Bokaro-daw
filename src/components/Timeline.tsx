@@ -7,6 +7,7 @@ interface Track {
   muted: boolean
   soloed: boolean
   fxEnabled: boolean
+  color?: string
 }
 
 interface MidiEvent {
@@ -107,8 +108,8 @@ export default function Timeline({
                         position: 'absolute', 
                         top: '10px', 
                         pointerEvents: 'none',
-                        background: track.type === 'vocaloid' ? 'rgba(255, 46, 99, 0.08)' : undefined,
-                        borderColor: track.type === 'vocaloid' ? 'rgba(255, 46, 99, 0.3)' : undefined
+                        background: track.type === 'vocaloid' ? 'rgba(255, 46, 99, 0.08)' : track.color ? `${track.color.replace(')', ', 0.08)').replace('hsl', 'hsla')}` : undefined,
+                        borderColor: track.type === 'vocaloid' ? 'rgba(255, 46, 99, 0.3)' : track.color ? track.color : undefined
                       }} 
                     />
                   )}
@@ -126,8 +127,9 @@ export default function Timeline({
                           left: `${dropX}px`, 
                           top: `${(Math.sin(note.id.charCodeAt(note.id.length - 1)) * 30) + 40}px`, 
                           width: '15px',
-                          background: track.type === 'vocaloid' ? 'linear-gradient(90deg, #ff2e63, #ff6b8b)' : undefined,
-                          borderColor: track.type === 'vocaloid' ? 'rgba(255, 46, 99, 0.5)' : undefined
+                          background: track.type === 'vocaloid' ? 'linear-gradient(90deg, #ff2e63, #ff6b8b)' : track.color || 'var(--accent)',
+                          boxShadow: `inset 0 1px 2px rgba(255,255,255,0.4), 0 0 4px ${track.type === 'vocaloid' ? '#ff2e63' : track.color || 'var(--accent-glow)'}`,
+                          borderColor: track.type === 'vocaloid' ? 'rgba(255, 46, 99, 0.5)' : track.color || 'var(--accent)'
                         }}
                         draggable
                         onDragStart={(e) => handleDragStart(e, note.id)}

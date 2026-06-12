@@ -1,11 +1,13 @@
 import React from 'react'
 import Knob from './Knob.tsx'
+import { VstPanel } from './VstPanel.tsx'
 
 interface InstrumentPanelProps {
   trackType: string
   synthInstrument: string
   setSynthInstrument: (val: string) => void
   projectKey: number
+  setProjectKey?: (val: number) => void
   onPlayPianoKey: (noteName: string, oct: number, semis: number) => void
   onPlayDrumPad: (type: string) => void
   onPlayChordPad: (chord: string, idx: number) => void
@@ -31,6 +33,7 @@ export default function InstrumentPanel({
   synthInstrument,
   setSynthInstrument,
   projectKey,
+  setProjectKey,
   onPlayPianoKey,
   onPlayDrumPad,
   onPlayChordPad,
@@ -50,6 +53,8 @@ export default function InstrumentPanel({
   setMidiEvents,
   vocaloidFolder
 }: InstrumentPanelProps) {
+  const [audioPitchShift, setAudioPitchShift] = React.useState(0)
+
   if (trackType === 'audio') {
     return (
       <div className="panel-view" id="view-audio" style={{ display: 'flex', flexDirection: 'column', width: '100%', gap: '12px' }}>
@@ -75,9 +80,9 @@ export default function InstrumentPanel({
               style={{
                 width: '90px',
                 height: '56px',
-                background: isMicAllowed ? '#00d28f' : '#222',
-                color: isMicAllowed ? 'black' : 'white',
-                border: 'none',
+                background: isMicAllowed ? 'var(--accent)' : 'var(--bg-card)',
+                color: isMicAllowed ? '#000' : 'var(--text-muted)',
+                border: isMicAllowed ? 'none' : '1px solid var(--border)',
                 borderRadius: '6px',
                 fontSize: '9px',
                 fontWeight: 700,
@@ -88,7 +93,7 @@ export default function InstrumentPanel({
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                boxShadow: isMicAllowed ? '0 0 10px rgba(0,210,143,0.3)' : 'none'
+                boxShadow: isMicAllowed ? '0 0 10px var(--accent-glow)' : 'none'
               }}
             >
               {isMicAllowed ? (
@@ -99,11 +104,14 @@ export default function InstrumentPanel({
             </button>
 
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px', width: '100%' }}>
-              <span style={{ fontSize: '8px', fontWeight: 700, color: '#556', letterSpacing: '0.8px' }}>PITCH SHIFT</span>
-              <div style={{ width: '42px', height: '42px', borderRadius: '50%', background: 'radial-gradient(circle at 35% 35%, #3a3a4a, #111)', border: '2px solid #3a3a4a', position: 'relative', cursor: 'pointer' }}>
-                <div style={{ width: '4px', height: '4px', background: '#00d28f', borderRadius: '50%', position: 'absolute', top: '4px', left: '17px', boxShadow: '0 0 4px #00d28f' }} />
-              </div>
-              <span style={{ fontSize: '9px', color: '#556', fontWeight: 600 }}>0 st</span>
+              <span style={{ fontSize: '10px', color: 'var(--text-muted)', fontWeight: 600 }}>Pitch Shift</span>
+              <Knob 
+                min={-12} 
+                max={12} 
+                value={audioPitchShift} 
+                onChange={(val) => setAudioPitchShift(Math.round(val))} 
+                displayValue={`${audioPitchShift > 0 ? '+' : ''}${Math.round(audioPitchShift)} st`}
+              />
             </div>
           </div>
 
@@ -193,33 +201,104 @@ export default function InstrumentPanel({
     ]
 
     return (
-      <div className="panel-view" id="view-keys" style={{ display: 'flex', flexDirection: 'column', width: '100%', height: '100%' }}>
-        <div className="synth-controls" style={{ display: 'flex', gap: '15px', alignItems: 'center', marginBottom: '8px' }}>
-          <select 
-            value={synthInstrument} 
-            onChange={(e) => setSynthInstrument(e.target.value)}
-          >
-            <option value="basic-sine">Rhodes Sine</option>
-            <option value="retro-square">Retro Arcade Square</option>
-            <option value="warm-saw">Warm Brass Saw</option>
-            <option value="harmonic-triangle">Harmonic Flute</option>
-            <option value="rhodes-fm">Rhodes Electric Piano</option>
-          </select>
-          <span className="hint" style={{ margin: 0, fontSize: '12px', color: 'var(--text-muted)' }}>Play via clicking or using home row keys.</span>
-        </div>
+      <div className="panel-view" id="view-keys" style={{ display: 'flex', flexDirection: 'column', width: '100%', height: '100%', alignItems: 'center', justifyContent: 'center', overflowY: 'auto' }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', width: '100%', flexGrow: 1, gap: '40px', alignItems: 'flex-start', justifyContent: 'center', padding: '20px' }}>
 
-        <div style={{ display: 'flex', gap: '20px', alignItems: 'flex-start', width: '100%', overflowX: 'auto', flexGrow: 1 }}>
-          <div className="chord-pads-container" style={{ flexShrink: 0, width: '220px' }}>
-            <h4 style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-              Scale Chord Pads ({currentScale.name})
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '30px', width: '220px', flexShrink: 0 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              <h4 style={{ fontSize: '12px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', textAlign: 'center', margin: 0 }}>
+                Synthesizer
+              </h4>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                <select 
+                  value={synthInstrument} 
+                  onChange={(e) => setSynthInstrument(e.target.value)}
+                  style={{ padding: '8px 12px', background: 'var(--bg-card)', color: '#fff', border: '1px solid var(--border)', borderRadius: '6px', fontSize: '13px', width: '100%' }}
+                >
+                  <option value="basic-sine">Rhodes Sine</option>
+                  <option value="retro-square">Retro Arcade Square</option>
+                  <option value="warm-saw">Warm Brass Saw</option>
+                  <option value="harmonic-triangle">Harmonic Flute</option>
+                  <option value="rhodes-fm">Rhodes Electric Piano</option>
+                </select>
+                <div 
+                  tabIndex={0}
+                  style={{ 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    justifyContent: 'space-between',
+                    background: 'rgba(255,255,255,0.05)', 
+                    padding: '6px 12px', 
+                    borderRadius: '6px', 
+                    border: '1px solid var(--accent)', 
+                    cursor: 'pointer',
+                    outline: 'none',
+                    width: '100%'
+                  }}
+                  onKeyDown={(e) => {
+                    if (!setProjectKey) return
+                    if (e.key === '-' || e.key === '_') {
+                      e.preventDefault()
+                      setProjectKey(Math.max(0, projectKey - 1))
+                    } else if (e.key === '+' || e.key === '=') {
+                      e.preventDefault()
+                      setProjectKey(Math.min(scales.length - 1, projectKey + 1))
+                    }
+                  }}
+                >
+                  <div style={{ display: 'flex', gap: '10px', alignItems: 'center', color: 'var(--accent)', cursor: 'pointer' }}>
+                    <i className="bx bx-minus" onClick={() => setProjectKey && setProjectKey(Math.max(0, projectKey - 1))} />
+                    <i className="bx bx-plus" onClick={() => setProjectKey && setProjectKey(Math.min(scales.length - 1, projectKey + 1))} />
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+                    <span style={{ fontWeight: 600, fontSize: '14px' }}>{currentScale.name}</span>
+                    <span style={{ fontSize: '9px', color: 'var(--text-muted)' }}>(Use +/- keys)</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+
+          <div className="chord-pads-container" style={{ flexGrow: 1, minWidth: '400px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+            <h4 style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '15px', textTransform: 'uppercase', letterSpacing: '0.5px', textAlign: 'center' }}>
+              Scale Chord Pads
             </h4>
-            <div className="chord-pads" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '6px' }}>
+            <div className="chord-pads" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '15px', width: '100%' }}>
               {currentScale.chords.map((chord, idx) => (
                 <div 
                   key={chord} 
                   className="chord-pad"
                   onClick={() => onPlayChordPad(chord, idx)}
-                  style={{ padding: '8px 4px', fontSize: '11px', textAlign: 'center', margin: 0, height: 'auto', display: 'flex', justifyContent: 'center', alignItems: 'center' }}
+                  style={{ 
+                    padding: '15px 5px', 
+                    fontSize: '20px', 
+                    fontWeight: 700, 
+                    textAlign: 'center', 
+                    margin: 0, 
+                    height: 'auto', 
+                    display: 'flex', 
+                    justifyContent: 'center', 
+                    alignItems: 'center',
+                    background: 'var(--bg-card)',
+                    border: '1px solid var(--border)',
+                    borderRadius: '12px',
+                    cursor: 'pointer',
+                    transition: 'all 0.15s ease',
+                    boxShadow: '0 4px 12px rgba(0,0,0,0.2)'
+                  }}
+                  onMouseOver={(e) => {
+                    e.currentTarget.style.background = 'var(--accent-glow)'
+                    e.currentTarget.style.borderColor = 'var(--accent)'
+                    e.currentTarget.style.transform = 'translateY(-2px)'
+                    e.currentTarget.style.boxShadow = '0 8px 16px rgba(0,0,0,0.3)'
+                  }}
+                  onMouseOut={(e) => {
+                    e.currentTarget.style.background = 'var(--bg-card)'
+                    e.currentTarget.style.borderColor = 'var(--border)'
+                    e.currentTarget.style.transform = 'none'
+                    e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.2)'
+                  }}
                 >
                   {chord}
                 </div>
@@ -227,36 +306,38 @@ export default function InstrumentPanel({
             </div>
           </div>
 
-          <div className="piano-container" style={{ flexGrow: 1, minWidth: 0 }}>
-            <h4 style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-              Piano Keyboard synthesizer
+          <div className="piano-container" style={{ flexGrow: 1, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+            <h4 style={{ fontSize: '14px', color: 'var(--text-muted)', marginBottom: '20px', textTransform: 'uppercase', letterSpacing: '0.5px', textAlign: 'center' }}>
+              Piano Keyboard
             </h4>
-            <div className="piano-keys" id="piano-keys" style={{ height: '110px' }}>
+            <div className="piano-keys" id="piano-keys" style={{ height: '240px', justifyContent: 'center' }}>
               {octaves.map((octave) => 
                 octave.keys.map((key) => (
                   <div 
                     key={key.noteName}
                     className={`piano-key ${key.type}`}
                     onClick={() => onPlayPianoKey(key.noteName, octave.oct, key.semis)}
-                    style={{ height: key.type === 'white' ? '100px' : '60px' }}
+                    style={{ 
+                      height: key.type === 'white' ? '220px' : '140px',
+                      width: key.type === 'white' ? '60px' : '38px',
+                      marginLeft: key.type === 'black' ? '-19px' : '0',
+                      marginRight: key.type === 'black' ? '-19px' : '0'
+                    }}
                   >
                     {key.type === 'white' && (
                       <>
-                        <span className="key-label" style={{ fontSize: '8px' }}>{key.noteName}</span>
-                        <span className="key-shortcut" style={{ fontSize: '8px', padding: '1px 2px' }}>{key.map.toUpperCase()}</span>
+                        <span className="key-label" style={{ fontSize: '12px' }}>{key.noteName}</span>
+                        <span className="key-shortcut" style={{ fontSize: '12px', padding: '2px 4px', marginTop: '4px' }}>{key.map.toUpperCase()}</span>
                       </>
                     )}
                   </div>
                 ))
               )}
-              <div 
-                className="piano-key white piano-key-lg"
-                onClick={() => onPlayPianoKey('C5', 5, 0)}
-                style={{ height: '100px' }}
-              >
-                <span className="key-label" style={{ fontSize: '8px' }}>C5</span>
-              </div>
             </div>
+          </div>
+          
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', flexShrink: 0 }}>
+            <VstPanel />
           </div>
         </div>
       </div>
@@ -307,7 +388,7 @@ export default function InstrumentPanel({
       { id: 'taya', name: 'Taya Soune', alias: '蒼音タヤ', color: '#00d2ff', desc: 'Deep Ocean', baseFreq: 174.61 }
     ]
 
-    const [activePreset, setActivePreset] = React.useState(PRESETS[0])
+    const [activeModel, setActiveModel] = React.useState<string | null>(null)
     const [speed, setSpeed] = React.useState(1.0)
     const [pitch, setPitch] = React.useState(1.0)
     const [baseFreq, setBaseFreq] = React.useState(261.63)
@@ -317,24 +398,36 @@ export default function InstrumentPanel({
     const [audioUrl, setAudioUrl] = React.useState<string | null>(null)
     const [rawAudioPath, setRawAudioPath] = React.useState<string | null>(null)
 
+    const getPresetInfo = (modelName: string) => {
+      if (!modelName) return PRESETS[0]
+      const match = PRESETS.find(p => modelName.toLowerCase().includes(p.id))
+      if (match) return match
+      return { id: modelName, name: modelName, alias: 'Custom Model', color: 'var(--accent)', desc: 'Local Voicebank', baseFreq: 220.0 }
+    }
+
+    const activePreset = getPresetInfo(activeModel || '')
+
     React.useEffect(() => {
       if (ipcRenderer) {
         ipcRenderer.invoke('list-models').then((res: string[]) => {
           setModels(res)
+          if (res.length > 0 && !activeModel) {
+            setActiveModel(res[0])
+          }
         }).catch(console.error)
       }
     }, [vocaloidFolder])
 
     React.useEffect(() => {
       setBaseFreq(activePreset.baseFreq)
-    }, [activePreset])
+    }, [activeModel])
 
     const handleSingleGenerate = async () => {
       if (!text.trim() || !ipcRenderer) return
       setIsSynthesizing(true)
       setAudioUrl(null)
       try {
-        const modelName = models.find(m => m.toLowerCase().includes(activePreset.id)) || models[0] || 'TETO-English-150401'
+        const modelName = activeModel || models[0] || 'TETO-English-150401'
         const audioPath = await ipcRenderer.invoke('generate-tts', { 
           text: text.trim(), 
           model: modelName, 
@@ -392,7 +485,7 @@ export default function InstrumentPanel({
 
       setIsSynthesizing(true)
       try {
-        const modelName = models.find(m => m.toLowerCase().includes(activePreset.id)) || models[0] || 'TETO-English-150401'
+        const modelName = activeModel || models[0] || 'TETO-English-150401'
         
         const notesPayload = trackNotes.map(n => ({
           time: n.time,
@@ -465,16 +558,39 @@ export default function InstrumentPanel({
         
         {/* Left column: Preset Selection */}
         <div style={{ display: 'flex', flexDirection: 'column', width: '250px', flexShrink: 0, gap: '8px' }}>
-          <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '2px' }}>
-            UTAU Voice Presets
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2px' }}>
+            <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+              Voice Models
+            </div>
+            <button 
+              onClick={async () => {
+                if (ipcRenderer) {
+                  const res = await ipcRenderer.invoke('select-vocaloid-folder')
+                  if (res) {
+                    const newModels = await ipcRenderer.invoke('list-models')
+                    setModels(newModels)
+                    if (newModels.length > 0) {
+                      setActiveModel(newModels[newModels.length - 1])
+                    }
+                  }
+                }
+              }}
+              style={{ background: 'rgba(255,255,255,0.05)', color: 'var(--text-main)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '4px', fontSize: '9px', padding: '3px 8px', cursor: 'pointer', textTransform: 'uppercase', fontWeight: 600, transition: 'background 0.2s' }}
+              onMouseOver={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.1)'}
+              onMouseOut={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.05)'}
+            >
+              Add Folder
+            </button>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', overflowY: 'auto', flex: 1, paddingRight: '4px' }}>
-            {PRESETS.map((p) => {
-              const isActive = activePreset.id === p.id
+            {models.length === 0 && <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>No models found. Click "Add Folder".</div>}
+            {models.map((modelName) => {
+              const p = getPresetInfo(modelName)
+              const isActive = activeModel === modelName
               return (
                 <div 
-                  key={p.id}
-                  onClick={() => setActivePreset(p)}
+                  key={modelName}
+                  onClick={() => setActiveModel(modelName)}
                   style={{
                     display: 'flex',
                     alignItems: 'center',
@@ -482,16 +598,16 @@ export default function InstrumentPanel({
                     padding: '8px 12px',
                     borderRadius: '8px',
                     cursor: 'pointer',
-                    background: isActive ? `rgba(255, 46, 99, 0.1)` : 'rgba(255, 255, 255, 0.02)',
-                    border: `1px solid ${isActive ? p.color : 'rgba(255, 255, 255, 0.06)'}`,
+                    background: isActive ? 'var(--accent-glow)' : 'rgba(255, 255, 255, 0.02)',
+                    border: `1px solid ${isActive ? 'var(--accent)' : 'rgba(255, 255, 255, 0.06)'}`,
                     transition: 'all 0.2s',
-                    boxShadow: isActive ? `0 0 10px rgba(255, 46, 99, 0.2)` : 'none'
+                    boxShadow: isActive ? '0 0 10px var(--accent-glow)' : 'none'
                   }}
                 >
-                  <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: p.color, boxShadow: `0 0 8px ${p.color}` }} />
-                  <div style={{ display: 'flex', flexDirection: 'column' }}>
-                    <span style={{ fontSize: '12px', fontWeight: 600, color: '#fff' }}>{p.name} <span style={{ fontSize: '9px', opacity: 0.6 }}>({p.alias})</span></span>
-                    <span style={{ fontSize: '9px', color: 'var(--text-muted)' }}>{p.desc}</span>
+                  <div style={{ width: '10px', height: '10px', borderRadius: '50%', flexShrink: 0, background: isActive ? 'var(--accent)' : p.color, boxShadow: `0 0 8px ${isActive ? 'var(--accent)' : p.color}` }} />
+                  <div style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+                    <span style={{ fontSize: '12px', fontWeight: 600, color: '#fff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}</span>
+                    <span style={{ fontSize: '9px', color: 'var(--text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.alias} • {p.desc}</span>
                   </div>
                 </div>
               )
@@ -561,9 +677,9 @@ export default function InstrumentPanel({
           <div style={{ display: 'flex', flexDirection: 'column', flex: 1, gap: '12px' }}>
             
             {/* Sequence compile */}
-            <div style={{ display: 'flex', flexDirection: 'column', background: 'rgba(255, 46, 99, 0.03)', border: '1px solid rgba(255, 46, 99, 0.15)', borderRadius: '10px', padding: '16px', gap: '8px', justifyContent: 'center' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', background: 'var(--bg-card)', border: '1px solid rgba(255, 255, 255, 0.05)', backdropFilter: 'blur(8px)', borderRadius: '10px', padding: '16px', gap: '8px', justifyContent: 'center' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <i className="bx bx-music" style={{ color: activePreset.color, fontSize: '20px' }} />
+                <i className="bx bx-music" style={{ color: 'var(--accent)', fontSize: '20px', textShadow: '0 0 8px var(--accent-glow)' }} />
                 <span style={{ fontWeight: 700, fontSize: '13px' }}>UTAU MIDI Sequencer Compiler</span>
               </div>
               <p style={{ fontSize: '10px', color: 'var(--text-muted)', margin: 0 }}>
@@ -573,24 +689,35 @@ export default function InstrumentPanel({
                 onClick={handleSequenceGenerate}
                 disabled={isSynthesizing}
                 style={{
-                  background: `linear-gradient(135deg, ${activePreset.color}, #d81b60)`,
-                  color: '#fff',
-                  border: 'none',
+                  background: 'rgba(80, 250, 123, 0.1)',
+                  color: 'var(--accent)',
+                  border: '1px solid var(--accent)',
+                  backdropFilter: 'blur(4px)',
                   borderRadius: '8px',
                   padding: '12px 20px',
-                  fontWeight: 700,
+                  fontWeight: 600,
                   fontSize: '12px',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.5px',
                   cursor: 'pointer',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                   gap: '8px',
                   transition: 'all 0.2s',
-                  boxShadow: `0 4px 15px rgba(255, 46, 99, 0.3)`,
+                  boxShadow: '0 0 10px var(--accent-glow), inset 0 0 5px var(--accent-glow)',
                   marginTop: '4px'
                 }}
-                onMouseOver={(e) => e.currentTarget.style.filter = 'brightness(1.1)'}
-                onMouseOut={(e) => e.currentTarget.style.filter = 'none'}
+                onMouseOver={(e) => {
+                  e.currentTarget.style.background = 'rgba(80, 250, 123, 0.2)'
+                  e.currentTarget.style.color = '#fff'
+                  e.currentTarget.style.textShadow = '0 0 5px var(--accent)'
+                }}
+                onMouseOut={(e) => {
+                  e.currentTarget.style.background = 'rgba(80, 250, 123, 0.1)'
+                  e.currentTarget.style.color = 'var(--accent)'
+                  e.currentTarget.style.textShadow = 'none'
+                }}
               >
                 {isSynthesizing ? (
                   <>
@@ -651,14 +778,27 @@ export default function InstrumentPanel({
                   <button 
                     onClick={() => ipcRenderer.invoke('save-file', rawAudioPath)}
                     style={{
-                      background: activePreset.color,
-                      color: 'white',
-                      border: 'none',
-                      padding: '4px 10px',
-                      fontSize: '9px',
-                      fontWeight: 700,
-                      borderRadius: '4px',
-                      cursor: 'pointer'
+                      background: 'rgba(80, 250, 123, 0.1)',
+                      color: 'var(--accent)',
+                      border: '1px solid var(--accent)',
+                      borderRadius: '6px',
+                      padding: '4px 16px',
+                      fontWeight: 600,
+                      fontSize: '11px',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s',
+                      height: '100%',
+                      boxShadow: '0 0 10px var(--accent-glow), inset 0 0 5px var(--accent-glow)'
+                    }}
+                    onMouseOver={(e) => {
+                      e.currentTarget.style.background = 'rgba(80, 250, 123, 0.2)'
+                      e.currentTarget.style.color = '#fff'
+                      e.currentTarget.style.textShadow = '0 0 5px var(--accent)'
+                    }}
+                    onMouseOut={(e) => {
+                      e.currentTarget.style.background = 'rgba(80, 250, 123, 0.1)'
+                      e.currentTarget.style.color = 'var(--accent)'
+                      e.currentTarget.style.textShadow = 'none'
                     }}
                   >
                     Save WAV

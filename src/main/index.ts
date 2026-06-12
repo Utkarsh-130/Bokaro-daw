@@ -111,3 +111,56 @@ ipcMain.handle('save-file', async (_event, filePath: string) => {
   }
   return false
 })
+
+let lastCpuTime = process.getCPUUsage()
+ipcMain.handle('get-cpu-usage', () => {
+  const os = require('os')
+  const current = process.getCPUUsage()
+  const percent = current.percentCPUUsage
+  return percent / os.cpus().length
+})
+
+let vstHost: any = null;
+try {
+  const addonPath = join(__dirname, '../../juce_host/build/Release/addon.node');
+  const addon = require(addonPath);
+  vstHost = new addon.VstHost();
+} catch (e) {
+  console.log('VST Addon not built yet', e);
+}
+
+ipcMain.handle('load-vst', async (_, vstPath) => {
+  if (vstHost) return vstHost.loadPlugin(vstPath);
+  return false;
+});
+
+ipcMain.handle('load-vst-effect', async (_, vstPath) => {
+  if (vstHost) return vstHost.loadEffect(vstPath);
+  return false;
+});
+
+ipcMain.handle('select-vst-file', async () => {
+  const { dialog } = require('electron');
+  const result = await dialog.showOpenDialog({
+    properties: ['openFile'],
+    filters: [{ name: 'VST3 Plugins', extensions: ['vst3'] }],
+    title: 'Select VST3 Plugin'
+  });
+  if (!result.canceled && result.filePaths.length > 0) {
+    return result.filePaths[0];
+  }
+  return null;
+});
+
+ipcMain.handle('select-css-file', async () => {
+  const { dialog } = require('electron');
+  const result = await dialog.showOpenDialog({
+    properties: ['openFile'],
+    filters: [{ name: 'CSS Stylesheets', extensions: ['css'] }],
+    title: 'Select Custom CSS'
+  });
+  if (!result.canceled && result.filePaths.length > 0) {
+    return result.filePaths[0];
+  }
+  return null;
+});

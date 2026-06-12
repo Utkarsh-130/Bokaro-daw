@@ -7,6 +7,7 @@ interface Track {
   muted: boolean
   soloed: boolean
   fxEnabled: boolean
+  color?: string
 }
 
 interface TrackListProps {
@@ -110,6 +111,10 @@ function TrackItem({
       className={`track ${isActive ? 'active' : ''}`}
       onClick={onSelect}
       data-track-id={track.id}
+      style={{
+        borderLeftColor: isActive ? (track.color || 'var(--accent)') : (track.color ? track.color.replace('hsl', 'hsla').replace(')', ', 0.3)') : 'transparent'),
+        background: isActive ? (track.color ? track.color.replace('hsl', 'hsla').replace(')', ', 0.08)') : 'rgba(0, 210, 143, 0.06)') : ''
+      }}
     >
       <div className="track-controls">
         <button 

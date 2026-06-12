@@ -16,6 +16,7 @@ interface Track {
   muted: boolean
   soloed: boolean
   fxEnabled: boolean
+  color?: string
 }
 
 interface MidiEvent {
@@ -76,12 +77,12 @@ export default function App() {
   const [isMetronomeOn, setIsMetronomeOn] = useState(false)
   const [bpm, setBpm] = useState(90)
   const [projectKey, setProjectKey] = useState(0)
-  const [timeSig, setTimeSig] = useState('4/4')
+  const [timeSig, setTimeSig] = useState('1/4')
 
   const [tracks, setTracks] = useState<Track[]>([
-    { id: '1', name: 'Vocal Recording', type: 'audio', muted: false, soloed: false, fxEnabled: true },
-    { id: '2', name: 'Synthesizer L', type: 'tone', muted: false, soloed: false, fxEnabled: true },
-    { id: '3', name: 'Drum Pads Main', type: 'drum', muted: false, soloed: false, fxEnabled: true }
+    { id: '1', name: 'Vocal Recording', type: 'audio', muted: false, soloed: false, fxEnabled: true, color: `hsl(${Math.floor(Math.random() * 360)}, 70%, 60%)` },
+    { id: '2', name: 'Synthesizer L', type: 'tone', muted: false, soloed: false, fxEnabled: true, color: `hsl(${Math.floor(Math.random() * 360)}, 70%, 60%)` },
+    { id: '3', name: 'Drum Pads Main', type: 'drum', muted: false, soloed: false, fxEnabled: true, color: `hsl(${Math.floor(Math.random() * 360)}, 70%, 60%)` }
   ])
   const [activeTrackId, setActiveTrackId] = useState('1')
   const [activeTrackType, setActiveTrackType] = useState('audio')
@@ -200,6 +201,23 @@ export default function App() {
       if (folderPath) {
         setVocaloidFolder(folderPath)
         localStorage.setItem('vocaloidFolder', folderPath)
+      }
+    }
+  }
+
+  const handleLoadCss = async () => {
+    if ((window as any).require) {
+      const { ipcRenderer } = (window as any).require('electron')
+      const cssPath = await ipcRenderer.invoke('select-css-file')
+      if (cssPath) {
+        let link = document.getElementById('custom-theme-css') as HTMLLinkElement
+        if (!link) {
+          link = document.createElement('link')
+          link.id = 'custom-theme-css'
+          link.rel = 'stylesheet'
+          document.head.appendChild(link)
+        }
+        link.href = `file:///${cssPath.replace(/\\/g, '/')}`
       }
     }
   }
@@ -602,7 +620,8 @@ export default function App() {
       type: type,
       muted: false,
       soloed: false,
-      fxEnabled: true
+      fxEnabled: true,
+      color: `hsl(${Math.floor(Math.random() * 360)}, 70%, 60%)`
     }
     setTracks([...tracks, newTrack])
     setActiveTrackId(nextId)
@@ -680,8 +699,10 @@ export default function App() {
 
     const beatPx = 100
     let snapUnit = 1.0
-    if (timeSig === '1/4') snapUnit = 0.25
+    if (timeSig === '1/2') snapUnit = 0.5
+    else if (timeSig === '1/4') snapUnit = 0.25
     else if (timeSig === '1/8') snapUnit = 0.125
+    else if (timeSig === 'Off') snapUnit = 0.001
     
     const snapPx = beatPx * snapUnit
     const snappedDropX = Math.round(dropX / snapPx) * snapPx
@@ -911,7 +932,8 @@ export default function App() {
         type: 'audio',
         muted: false,
         soloed: false,
-        fxEnabled: true
+        fxEnabled: true,
+        color: `hsl(${Math.floor(Math.random() * 360)}, 70%, 60%)`
       }
       
       setTracks(prev => [...prev, newTrack])
@@ -1240,6 +1262,7 @@ export default function App() {
         onRedo={handleRedo}
         onFileImport={handleFileImport}
         onSaveWav={handleSaveWav}
+        onLoadCss={handleLoadCss}
       />
 
       <main className="main-content">
@@ -1297,6 +1320,7 @@ export default function App() {
             setTrackAudioUrls={setTrackAudioUrls}
             setMidiEvents={setMidiEvents}
             vocaloidFolder={vocaloidFolder}
+            setProjectKey={setProjectKey}
           />
         )}
         {activeTab === 'fx' && (
@@ -1335,12 +1359,12 @@ export default function App() {
         title="Add New Track" 
         onClose={() => setActiveModal(null)}
       >
-        <div className="modal-item" onClick={() => handleAddTrackWithType('vocaloid')} style={{ background: 'rgba(255, 46, 99, 0.04)', borderColor: 'rgba(255, 46, 99, 0.2)' }}>
+        <div className="modal-item" onClick={() => handleAddTrackWithType('vocaloid')}>
           <div className="modal-item-info">
-            <span className="modal-item-title" style={{ color: '#ff2e63', fontWeight: 'bold' }}>🎤 UTAU Vocaloid Track</span>
+            <span className="modal-item-title">Vocaloid</span>
             <span className="modal-item-desc">Synthesize virtual Japanese/English singers with full text-to-speech lyrics & MIDI</span>
           </div>
-          <i className="bx bx-music modal-item-action" style={{ color: '#ff2e63' }} />
+          <i className="bx bx-music modal-item-action" />
         </div>
         <div className="modal-item" onClick={() => handleAddTrackWithType('audio')}>
           <div className="modal-item-info">
