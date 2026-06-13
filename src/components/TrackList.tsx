@@ -20,6 +20,7 @@ interface TrackListProps {
   onRenameTrack: (id: string, name: string) => void
   onAddTrack: () => void
   onShowFxPanel: () => void
+  trackHeight: number
 }
 
 export default function TrackList({ 
@@ -31,7 +32,8 @@ export default function TrackList({
   onToggleFx,
   onRenameTrack,
   onAddTrack,
-  onShowFxPanel
+  onShowFxPanel,
+  trackHeight
 }: TrackListProps) {
   return (
     <div className="track-list" id="track-list">
@@ -49,6 +51,7 @@ export default function TrackList({
           onToggleFx={() => onToggleFx(track.id)}
           onRename={(newName) => onRenameTrack(track.id, newName)}
           onShowFxPanel={onShowFxPanel}
+          trackHeight={trackHeight}
         />
       ))}
     </div>
@@ -64,6 +67,7 @@ interface TrackItemProps {
   onToggleFx: () => void
   onRename: (name: string) => void
   onShowFxPanel: () => void
+  trackHeight: number
 }
 
 function TrackItem({ 
@@ -74,7 +78,8 @@ function TrackItem({
   onToggleSolo, 
   onToggleFx, 
   onRename,
-  onShowFxPanel
+  onShowFxPanel,
+  trackHeight
 }: TrackItemProps) {
   const [isEditing, setIsEditing] = useState(false)
 
@@ -112,6 +117,7 @@ function TrackItem({
       onClick={onSelect}
       data-track-id={track.id}
       style={{
+        height: `${trackHeight}px`,
         borderLeftColor: isActive ? (track.color || 'var(--accent)') : (track.color ? track.color.replace('hsl', 'hsla').replace(')', ', 0.3)') : 'transparent'),
         background: isActive ? (track.color ? track.color.replace('hsl', 'hsla').replace(')', ', 0.08)') : 'rgba(0, 210, 143, 0.06)') : ''
       }}

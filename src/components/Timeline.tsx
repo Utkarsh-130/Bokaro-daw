@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useState, useRef, useEffect } from 'react'
 
 interface Track {
   id: string
@@ -27,6 +27,11 @@ interface TimelineProps {
   onDropNoteOnTimeline: (noteId: string, trackId: string, type: string, dropX: number) => void
   onOpenMidiEditor: () => void
   trackAudioUrls: Record<string, string>
+  onSetPlaybackTime?: (time: number) => void
+  widthPerBeat: number
+  setWidthPerBeat: React.Dispatch<React.SetStateAction<number>>
+  trackHeight: number
+  setTrackHeight: React.Dispatch<React.SetStateAction<number>>
 }
 
 export default function Timeline({ 
@@ -37,10 +42,48 @@ export default function Timeline({
   bpm,
   onDropNoteOnTimeline,
   onOpenMidiEditor,
-  trackAudioUrls
+  trackAudioUrls,
+  onSetPlaybackTime,
+  widthPerBeat,
+  setWidthPerBeat,
+  trackHeight,
+  setTrackHeight
 }: TimelineProps) {
-  const widthPerBeat = 100
-  const beats = Array.from({ length: 16 }, (_, i) => i + 1)
+  const timelineRef = useRef<HTMLDivElement>(null)
+  
+  let maxTime = 16 * (60 / bpm)
+  midiEvents.forEach(ev => {
+    const end = ev.time + (ev.data?.duration || 0)
+    if (end > maxTime) maxTime = end
+  })
+  const totalBeats = Math.ceil(maxTime * (bpm / 60)) + 2
+  const beats = Array.from({ length: totalBeats }, (_, i) => i + 1)
+
+  useEffect(() => {
+    const el = timelineRef.current
+    if (!el) return
+
+    const handleWheel = (e: WheelEvent) => {
+      if (e.ctrlKey) {
+        e.preventDefault()
+        setWidthPerBeat(prev => {
+          const delta = e.deltaY < 0 ? 15 : -15
+          return Math.max(20, Math.min(400, prev + delta))
+        })
+      } else if (e.altKey) {
+        e.preventDefault()
+        if (setTrackHeight) {
+          setTrackHeight(prev => {
+            const delta = e.deltaY < 0 ? 10 : -10
+            return Math.max(40, Math.min(300, prev + delta))
+          })
+        }
+      }
+    }
+
+    el.addEventListener('wheel', handleWheel, { passive: false })
+    return () => el.removeEventListener('wheel', handleWheel)
+  }, [])
 
   const handleDragStart = (e: React.DragEvent, noteId: string) => {
     e.dataTransfer.setData('text/plain', noteId)
@@ -60,14 +103,49 @@ export default function Timeline({
     onDropNoteOnTimeline(noteId, trackId, type, dropX)
   }
 
+  const handleRulerMouseDown = (e: React.MouseEvent) => {
+    e.preventDefault()
+    const startX = e.clientX
+    const mainContent = document.querySelector('.main-content') as HTMLElement
+    if (!mainContent) return
+    const startScroll = mainContent.scrollLeft
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      const deltaX = moveEvent.clientX - startX
+      mainContent.scrollLeft = startScroll - deltaX
+    }
+
+    const handleMouseUp = () => {
+      window.removeEventListener('mousemove', handleMouseMove)
+      window.removeEventListener('mouseup', handleMouseUp)
+    }
+
+    window.addEventListener('mousemove', handleMouseMove)
+    window.addEventListener('mouseup', handleMouseUp)
+  }
+
+  const handleRulerDoubleClick = (e: React.MouseEvent) => {
+    if (!onSetPlaybackTime) return
+    const rect = e.currentTarget.getBoundingClientRect()
+    const clickX = Math.max(0, e.clientX - rect.left - 10) // 10px is playhead initial offset
+    const time = (clickX / widthPerBeat) / (bpm / 60)
+    onSetPlaybackTime(Math.max(0, time))
+  }
+
   return (
-    <div className="timeline" id="timeline">
-      <div className="ruler" id="ruler">
+    <div ref={timelineRef} className="timeline" id="timeline" style={{ minWidth: `${beats.length * widthPerBeat + 100}px` }}>
+      <div 
+        className="ruler" 
+        id="ruler"
+        onMouseDown={handleRulerMouseDown}
+        onDoubleClick={handleRulerDoubleClick}
+        style={{ cursor: 'grab', userSelect: 'none' }}
+      >
         {beats.map((beat) => (
           <div 
             key={beat} 
             className="beat" 
-            style={{ width: `${widthPerBeat}px` }}
+            style={{ width: `${widthPerBeat}px`, flexShrink: 0 }}
           >
             {beat.toString().padStart(2, '0')}
           </div>
@@ -86,6 +164,7 @@ export default function Timeline({
               key={track.id} 
               className={`timeline-track ${track.id === activeTrackId ? 'active-tl' : ''}`}
               id={`timeline-track-${track.id}`}
+              style={{ height: `${trackHeight}px` }}
               onClick={() => onSelectTrack(track.id, track.type)}
               onDoubleClick={() => {
                 onSelectTrack(track.id, track.type)
@@ -104,7 +183,7 @@ export default function Timeline({
                       height={60} 
                       style={{ 
                         width: '100%', 
-                        height: '60px', 
+                        height: `${Math.max(20, trackHeight - 30)}px`, 
                         position: 'absolute', 
                         top: '10px', 
                         pointerEvents: 'none',
@@ -116,18 +195,19 @@ export default function Timeline({
                 </>
               )}
               {track.type !== 'audio' && (
-                <div className={`midi-region ${targetType}`} style={{ left: '0px', width: '100%' }}>
+                <div className={`midi-region ${targetType}`} style={{ left: '0px', width: '100%', height: `${Math.max(20, trackHeight - 10)}px` }}>
                   {trackNotes.map((note) => {
-                    const dropX = note.time * (bpm / 60) * 100
+                    const dropX = note.time * (bpm / 60) * widthPerBeat
+                    const noteWidth = note.data?.duration ? (note.data.duration / (60 / bpm)) * widthPerBeat : 15
                     return (
                       <div 
                         key={note.id}
                         className={`midi-note ${targetType}`}
                         style={{ 
                           left: `${dropX}px`, 
-                          top: `${(Math.sin(note.id.charCodeAt(note.id.length - 1)) * 30) + 40}px`, 
-                          width: '15px',
-                          background: track.type === 'vocaloid' ? 'linear-gradient(90deg, #ff2e63, #ff6b8b)' : track.color || 'var(--accent)',
+                          top: `${(Math.sin(note.id.charCodeAt(note.id.length - 1)) * (trackHeight / 3)) + (trackHeight / 2.2)}px`, 
+                          width: `${noteWidth}px`,
+                          background: track.type === 'vocaloid' ? '#ff2e63' : track.color || 'var(--accent)',
                           boxShadow: `inset 0 1px 2px rgba(255,255,255,0.4), 0 0 4px ${track.type === 'vocaloid' ? '#ff2e63' : track.color || 'var(--accent-glow)'}`,
                           borderColor: track.type === 'vocaloid' ? 'rgba(255, 46, 99, 0.5)' : track.color || 'var(--accent)'
                         }}
