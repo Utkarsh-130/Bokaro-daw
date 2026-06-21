@@ -32,6 +32,7 @@ interface TimelineProps {
   setWidthPerBeat: React.Dispatch<React.SetStateAction<number>>
   trackHeight: number
   setTrackHeight: React.Dispatch<React.SetStateAction<number>>
+  onUpdateMidiEvent?: (noteId: string, updatedData: any) => void
 }
 
 export default function Timeline({ 
@@ -47,7 +48,8 @@ export default function Timeline({
   widthPerBeat,
   setWidthPerBeat,
   trackHeight,
-  setTrackHeight
+  setTrackHeight,
+  onUpdateMidiEvent
 }: TimelineProps) {
   const timelineRef = useRef<HTMLDivElement>(null)
   
@@ -58,6 +60,21 @@ export default function Timeline({
   })
   const totalBeats = Math.ceil(maxTime * (bpm / 60)) + 2
   const beats = Array.from({ length: totalBeats }, (_, i) => i + 1)
+
+  useEffect(() => {
+    Object.keys(trackAudioUrls).forEach(trackId => {
+      const audioEl = document.getElementById(`vocal-playback-${trackId}`) as HTMLAudioElement
+      if (audioEl) {
+        const wasPlaying = !audioEl.paused
+        const currentTime = audioEl.currentTime
+        audioEl.load()
+        if (wasPlaying) {
+          audioEl.currentTime = currentTime
+          audioEl.play().catch(e => console.error(e))
+        }
+      }
+    })
+  }, [trackAudioUrls])
 
   useEffect(() => {
     const el = timelineRef.current
@@ -205,16 +222,29 @@ export default function Timeline({
                         className={`midi-note ${targetType}`}
                         style={{ 
                           left: `${dropX}px`, 
-                          top: `${(Math.sin(note.id.charCodeAt(note.id.length - 1)) * (trackHeight / 3)) + (trackHeight / 2.2)}px`, 
+                          top: track.type === 'vocaloid' ? `${Math.max(0, Math.min(trackHeight - 15, trackHeight - (12 * Math.log2((note.data?.freq || 220) / 220) + 12) * (trackHeight / 24)))}px` : `${(Math.sin(note.id.charCodeAt(note.id.length - 1)) * (trackHeight / 3)) + (trackHeight / 2.2)}px`, 
                           width: `${noteWidth}px`,
+                          height: track.type === 'vocaloid' ? '15px' : undefined,
                           background: track.type === 'vocaloid' ? '#ff2e63' : track.color || 'var(--accent)',
                           boxShadow: `inset 0 1px 2px rgba(255,255,255,0.4), 0 0 4px ${track.type === 'vocaloid' ? '#ff2e63' : track.color || 'var(--accent-glow)'}`,
-                          borderColor: track.type === 'vocaloid' ? 'rgba(255, 46, 99, 0.5)' : track.color || 'var(--accent)'
+                          borderColor: track.type === 'vocaloid' ? 'rgba(255, 46, 99, 0.5)' : track.color || 'var(--accent)',
+                          display: track.type === 'vocaloid' ? 'flex' : undefined,
+                          alignItems: track.type === 'vocaloid' ? 'center' : undefined,
+                          justifyContent: track.type === 'vocaloid' ? 'center' : undefined,
+                          color: track.type === 'vocaloid' ? 'white' : undefined,
+                          fontSize: track.type === 'vocaloid' ? '11px' : undefined,
+                          fontWeight: track.type === 'vocaloid' ? 'bold' : undefined,
+                          overflow: track.type === 'vocaloid' ? 'hidden' : undefined,
+                          textOverflow: track.type === 'vocaloid' ? 'ellipsis' : undefined,
+                          whiteSpace: track.type === 'vocaloid' ? 'nowrap' : undefined,
+                          padding: track.type === 'vocaloid' ? '0 4px' : undefined
                         }}
                         draggable
                         onDragStart={(e) => handleDragStart(e, note.id)}
                         data-id={note.id}
-                      />
+                      >
+                        {track.type === 'vocaloid' ? (note.data?.lyric || 'a') : ''}
+                      </div>
                     )
                   })}
                 </div>

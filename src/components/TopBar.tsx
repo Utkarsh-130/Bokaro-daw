@@ -22,6 +22,10 @@ interface TopBarProps {
   onRedo: () => void
   onFileImport: (e: React.ChangeEvent<HTMLInputElement>) => void
   onSaveWav: () => void
+  onExportMmpz: () => void
+  onImportMmpz: (e: React.ChangeEvent<HTMLInputElement>) => void
+  onOpenPreviousProject: () => void
+  onNewProject: () => void
   onLoadCss: () => void
 }
 
@@ -47,11 +51,18 @@ export default function TopBar({
   onRedo,
   onFileImport,
   onSaveWav,
+  onExportMmpz,
+  onImportMmpz,
+  onOpenPreviousProject,
+  onNewProject,
   onLoadCss
 }: TopBarProps) {
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const mmpzInputRef = useRef<HTMLInputElement>(null)
   const [cpuLoad, setCpuLoad] = useState(0)
+  const [ramLoad, setRamLoad] = useState(0)
   const [isEditingTitle, setIsEditingTitle] = useState(false)
+  const [isMenuExpanded, setIsMenuExpanded] = useState(false)
 
   useEffect(() => {
     let interval: NodeJS.Timeout
@@ -61,6 +72,8 @@ export default function TopBar({
         try {
           const load = await ipcRenderer.invoke('get-cpu-usage')
           setCpuLoad(Math.min(100, Math.round(load)))
+          const rload = await ipcRenderer.invoke('get-ram-usage')
+          setRamLoad(Math.min(100, Math.round(rload)))
         } catch (e) {
           // Ignore
         }
@@ -84,48 +97,61 @@ export default function TopBar({
   return (
     <header className="top-bar">
       <div className="menu-icons">
-        <i className="bx bx-menu" />
-        <div className="menu-dropdown">
-          <span className="menu-btn">File</span>
-          <div className="menu-dropdown-content">
-            <div onClick={() => fileInputRef.current?.click()}><i className="bx bx-import" /> Import Audio</div>
-            <div onClick={onSaveWav}><i className="bx bx-export" /> Export Project (.wav)</div>
-            <input 
-              type="file" 
-              ref={fileInputRef} 
-              accept="audio/*" 
-              style={{ display: 'none' }} 
-              onChange={onFileImport}
-            />
+        <i className="bx bx-menu" onClick={() => setIsMenuExpanded(!isMenuExpanded)} />
+        <div className={`menu-buttons-container ${isMenuExpanded ? 'expanded' : ''}`}>
+          <div className="menu-dropdown">
+            <span className="menu-btn">File</span>
+            <div className="menu-dropdown-content">
+              <div onClick={onNewProject}><i className="bx bx-file-blank" /> New Project</div>
+              <div onClick={() => mmpzInputRef.current?.click()}><i className="bx bx-folder-open" /> Open Project (.mmpz)</div>
+              <div onClick={onOpenPreviousProject}><i className="bx bx-history" /> Open Previous Project</div>
+              <div onClick={() => fileInputRef.current?.click()}><i className="bx bx-import" /> Import Audio</div>
+              <div onClick={onSaveWav}><i className="bx bx-export" /> Export Project (.wav)</div>
+              <div onClick={onExportMmpz}><i className="bx bx-export" /> Export Project (.mmpz)</div>
+              <input 
+                type="file" 
+                ref={fileInputRef} 
+                accept="audio/*" 
+                style={{ display: 'none' }} 
+                onChange={onFileImport}
+              />
+              <input 
+                type="file" 
+                ref={mmpzInputRef} 
+                accept=".mmpz,.mmp" 
+                style={{ display: 'none' }} 
+                onChange={onImportMmpz}
+              />
+            </div>
           </div>
-        </div>
-        <div className="menu-dropdown">
-          <span className="menu-btn">Edit</span>
-          <div className="menu-dropdown-content">
-            <div onClick={onUndo}><i className="bx bx-undo" /> Undo</div>
-            <div onClick={onRedo}><i className="bx bx-redo" /> Redo</div>
-            <div onClick={() => onOpenModal('edit')}><i className="bx bx-edit" /> Preferences</div>
+          <div className="menu-dropdown">
+            <span className="menu-btn">View</span>
+            <div className="menu-dropdown-content">
+              <div onClick={() => onOpenModal('view')}><i className="bx bx-window-open" /> Layout Options</div>
+              <div onClick={onLoadCss}><i className="bx bx-palette" /> Load Custom Theme (.css)</div>
+            </div>
           </div>
-        </div>
-        <div className="menu-dropdown">
-          <span className="menu-btn">View</span>
-          <div className="menu-dropdown-content">
-            <div onClick={() => onOpenModal('view')}><i className="bx bx-window-open" /> Layout Options</div>
-            <div onClick={onLoadCss}><i className="bx bx-palette" /> Load Custom Theme (.css)</div>
+          <div className="menu-dropdown">
+            <span className="menu-btn">Edit</span>
+            <div className="menu-dropdown-content">
+              <div onClick={onUndo}><i className="bx bx-undo" /> Undo</div>
+              <div onClick={onRedo}><i className="bx bx-redo" /> Redo</div>
+              <div onClick={() => onOpenModal('edit')}><i className="bx bx-edit" /> Preferences</div>
+            </div>
           </div>
-        </div>
-        <div className="menu-dropdown">
-          <span className="menu-btn">Settings</span>
-          <div className="menu-dropdown-content">
-            <div onClick={() => onOpenModal('settings')}><i className="bx bx-cog" /> Audio Settings</div>
-            <div onClick={() => onOpenModal('settings')}><i className="bx bx-midi" /> MIDI Settings</div>
+          <div className="menu-dropdown">
+            <span className="menu-btn">Settings</span>
+            <div className="menu-dropdown-content">
+              <div onClick={() => onOpenModal('settings')}><i className="bx bx-cog" /> Audio Settings</div>
+              <div onClick={() => onOpenModal('settings')}><i className="bx bx-midi" /> MIDI Settings</div>
+            </div>
           </div>
-        </div>
-        <div className="menu-dropdown">
-          <span className="menu-btn">Help</span>
-          <div className="menu-dropdown-content">
-            <div onClick={() => onOpenModal('help')}><i className="bx bx-book-open" /> Documentation</div>
-            <div onClick={() => onOpenModal('help')}><i className="bx bx-info-circle" /> About</div>
+          <div className="menu-dropdown">
+            <span className="menu-btn">Help</span>
+            <div className="menu-dropdown-content">
+              <div onClick={() => onOpenModal('help')}><i className="bx bx-book-open" /> Documentation</div>
+              <div onClick={() => onOpenModal('help')}><i className="bx bx-info-circle" /> About</div>
+            </div>
           </div>
         </div>
       </div>
@@ -214,17 +240,18 @@ export default function TopBar({
         </div>
         
         <div 
-          className="cpu-monitor" 
-          title={`CPU Load: ${cpuLoad}%`}
+          className="system-monitor" 
+          title={`CPU: ${cpuLoad}% | RAM: ${ramLoad}%`}
           style={{
             display: 'flex',
             flexDirection: 'column',
             justifyContent: 'center',
+            gap: '4px',
             background: 'rgba(0, 0, 0, 0.4)',
             border: '1px solid rgba(255, 255, 255, 0.1)',
             borderRadius: '4px',
             padding: '4px 6px',
-            width: '60px',
+            width: '64px',
             height: '32px',
             marginLeft: '8px',
             position: 'relative',
@@ -232,22 +259,46 @@ export default function TopBar({
             boxShadow: 'inset 0 0 10px rgba(0,0,0,0.8)'
           }}
         >
-          <div style={{ fontSize: '9px', color: 'rgba(255, 255, 255, 0.5)', marginBottom: '2px', zIndex: 1, textShadow: '0 1px 2px rgba(0,0,0,0.8)', fontWeight: 600 }}>CPU</div>
-          <div style={{ 
-            height: '6px', 
-            background: 'rgba(255,255,255,0.05)', 
-            borderRadius: '2px', 
-            overflow: 'hidden',
-            zIndex: 1,
-            position: 'relative'
-          }}>
-            <div style={{
-              width: `${cpuLoad}%`,
-              height: '100%',
-              background: cpuLoad > 80 ? 'var(--red)' : cpuLoad > 50 ? 'var(--yellow)' : 'var(--accent)',
-              transition: 'width 0.3s ease-out, background 0.3s',
-              boxShadow: `0 0 8px ${cpuLoad > 80 ? 'var(--red)' : cpuLoad > 50 ? 'var(--yellow)' : 'var(--accent)'}`
-            }} />
+          {/* CPU Bar */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', zIndex: 1 }}>
+            <div style={{ fontSize: '8px', color: 'rgba(255, 255, 255, 0.6)', width: '16px', textShadow: '0 1px 2px rgba(0,0,0,0.8)', fontWeight: 600 }}>CPU</div>
+            <div style={{ 
+              flex: 1, 
+              height: '4px', 
+              background: 'rgba(255,255,255,0.05)', 
+              borderRadius: '2px', 
+              overflow: 'hidden',
+              position: 'relative'
+            }}>
+              <div style={{
+                width: `${cpuLoad}%`,
+                height: '100%',
+                background: cpuLoad > 80 ? 'var(--red)' : cpuLoad > 50 ? 'var(--yellow)' : 'var(--accent)',
+                transition: 'width 0.3s ease-out, background 0.3s',
+                boxShadow: `0 0 6px ${cpuLoad > 80 ? 'var(--red)' : cpuLoad > 50 ? 'var(--yellow)' : 'var(--accent)'}`
+              }} />
+            </div>
+          </div>
+
+          {/* RAM Bar */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', zIndex: 1 }}>
+            <div style={{ fontSize: '8px', color: 'rgba(255, 255, 255, 0.6)', width: '16px', textShadow: '0 1px 2px rgba(0,0,0,0.8)', fontWeight: 600 }}>RAM</div>
+            <div style={{ 
+              flex: 1, 
+              height: '4px', 
+              background: 'rgba(255,255,255,0.05)', 
+              borderRadius: '2px', 
+              overflow: 'hidden',
+              position: 'relative'
+            }}>
+              <div style={{
+                width: `${ramLoad}%`,
+                height: '100%',
+                background: ramLoad > 80 ? 'var(--red)' : ramLoad > 50 ? 'var(--yellow)' : 'var(--track-audio)',
+                transition: 'width 0.3s ease-out, background 0.3s',
+                boxShadow: `0 0 6px ${ramLoad > 80 ? 'var(--red)' : ramLoad > 50 ? 'var(--yellow)' : 'var(--track-audio)'}`
+              }} />
+            </div>
           </div>
         </div>
       </div>

@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 
 interface Track {
   id: string
@@ -18,6 +18,7 @@ interface TrackListProps {
   onToggleSolo: (id: string) => void
   onToggleFx: (id: string) => void
   onRenameTrack: (id: string, name: string) => void
+  onDeleteTrack: (id: string) => void
   onAddTrack: () => void
   onShowFxPanel: () => void
   trackHeight: number
@@ -31,6 +32,7 @@ export default function TrackList({
   onToggleSolo, 
   onToggleFx,
   onRenameTrack,
+  onDeleteTrack,
   onAddTrack,
   onShowFxPanel,
   trackHeight
@@ -50,6 +52,7 @@ export default function TrackList({
           onToggleSolo={() => onToggleSolo(track.id)}
           onToggleFx={() => onToggleFx(track.id)}
           onRename={(newName) => onRenameTrack(track.id, newName)}
+          onDelete={() => onDeleteTrack(track.id)}
           onShowFxPanel={onShowFxPanel}
           trackHeight={trackHeight}
         />
@@ -66,6 +69,7 @@ interface TrackItemProps {
   onToggleSolo: () => void
   onToggleFx: () => void
   onRename: (name: string) => void
+  onDelete: () => void
   onShowFxPanel: () => void
   trackHeight: number
 }
@@ -78,10 +82,30 @@ function TrackItem({
   onToggleSolo, 
   onToggleFx, 
   onRename,
+  onDelete,
   onShowFxPanel,
   trackHeight
 }: TrackItemProps) {
   const [isEditing, setIsEditing] = useState(false)
+  const [menuPos, setMenuPos] = useState<{x: number, y: number} | null>(null)
+
+  useEffect(() => {
+    if (menuPos) {
+      const handleClose = () => setMenuPos(null)
+      window.addEventListener('click', handleClose)
+      window.addEventListener('contextmenu', handleClose)
+      return () => {
+        window.removeEventListener('click', handleClose)
+        window.removeEventListener('contextmenu', handleClose)
+      }
+    }
+  }, [menuPos])
+
+  const handleContextMenu = (e: React.MouseEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setMenuPos({ x: e.clientX, y: e.clientY })
+  }
 
   const handleBlur = (e: React.FocusEvent<HTMLSpanElement>) => {
     setIsEditing(false)
@@ -115,6 +139,7 @@ function TrackItem({
     <div 
       className={`track ${isActive ? 'active' : ''}`}
       onClick={onSelect}
+      onContextMenu={handleContextMenu}
       data-track-id={track.id}
       style={{
         height: `${trackHeight}px`,
@@ -177,6 +202,60 @@ function TrackItem({
           {track.fxEnabled ? 'ON' : 'OFF'}
         </span>
       </div>
+
+      {menuPos && (
+        <div 
+          style={{
+            position: 'fixed',
+            top: menuPos.y,
+            left: menuPos.x,
+            background: '#222',
+            border: '1px solid #444',
+            padding: '4px',
+            borderRadius: '4px',
+            zIndex: 1000,
+            display: 'flex',
+            flexDirection: 'column',
+            minWidth: '150px',
+            boxShadow: '0 4px 12px rgba(0,0,0,0.5)'
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div 
+            style={{ padding: '8px 12px', cursor: 'pointer', fontSize: '12px', color: '#fff', display: 'flex', alignItems: 'center', gap: '8px', borderRadius: '2px' }}
+            onMouseEnter={(e) => e.currentTarget.style.background = '#333'}
+            onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+            onClick={() => { onShowFxPanel(); setMenuPos(null); }}
+          >
+            <i className="bx bx-slider-alt" /> Add Effects (VST)
+          </div>
+          <div 
+            style={{ padding: '8px 12px', cursor: 'pointer', fontSize: '12px', color: '#fff', display: 'flex', alignItems: 'center', gap: '8px', borderRadius: '2px' }}
+            onMouseEnter={(e) => e.currentTarget.style.background = '#333'}
+            onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+            onClick={() => { onToggleMute(); setMenuPos(null); }}
+          >
+            <i className="bx bx-volume-mute" /> {track.muted ? 'Unmute' : 'Mute'}
+          </div>
+          <div 
+            style={{ padding: '8px 12px', cursor: 'pointer', fontSize: '12px', color: '#fff', display: 'flex', alignItems: 'center', gap: '8px', borderRadius: '2px' }}
+            onMouseEnter={(e) => e.currentTarget.style.background = '#333'}
+            onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+            onClick={() => { onToggleSolo(); setMenuPos(null); }}
+          >
+            <i className="bx bx-headphone" /> {track.soloed ? 'Unsolo' : 'Solo'}
+          </div>
+          <div style={{ height: '1px', background: '#444', margin: '4px 0' }} />
+          <div 
+            style={{ padding: '8px 12px', cursor: 'pointer', fontSize: '12px', color: '#ff4d4d', display: 'flex', alignItems: 'center', gap: '8px', borderRadius: '2px' }}
+            onMouseEnter={(e) => e.currentTarget.style.background = '#333'}
+            onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+            onClick={() => { onDelete(); setMenuPos(null); }}
+          >
+            <i className="bx bx-trash" /> Delete Track
+          </div>
+        </div>
+      )}
     </div>
   )
 }
