@@ -28,54 +28,74 @@ interface InstrumentPanelProps {
   vocaloidFolder?: string
 }
 
-export default function InstrumentPanel({
-  trackType,
-  synthInstrument,
-  setSynthInstrument,
-  projectKey,
-  setProjectKey,
-  onPlayPianoKey,
-  onPlayDrumPad,
-  onPlayChordPad,
-  isRecordingVocal,
-  onToggleVocalRecord,
-  isMicAllowed,
-  onAllowMic,
-  audioInputs = [],
-  audioOutputs = [],
-  selectedInputId = '',
-  setSelectedInputId,
-  selectedOutputId = '',
-  setSelectedOutputId,
-  activeTrackId,
-  midiEvents = [],
-  setTrackAudioUrls,
-  setMidiEvents,
-  vocaloidFolder
-}: InstrumentPanelProps) {
+export default function InstrumentPanel(props: InstrumentPanelProps) {
+  const {
+    trackType,
+    synthInstrument,
+    setSynthInstrument,
+    projectKey,
+    setProjectKey,
+    onPlayPianoKey,
+    onPlayDrumPad,
+    onPlayChordPad,
+    isRecordingVocal,
+    onToggleVocalRecord,
+    isMicAllowed,
+    onAllowMic,
+    audioInputs = [],
+    audioOutputs = [],
+    selectedInputId = '',
+    setSelectedInputId,
+    selectedOutputId = '',
+    setSelectedOutputId,
+    activeTrackId,
+    midiEvents = [],
+    setTrackAudioUrls,
+    setMidiEvents,
+    vocaloidFolder
+  } = props;
+
   const [audioPitchShift, setAudioPitchShift] = React.useState(0)
 
   if (trackType === 'audio') {
-    return (
-      <div className="panel-view" id="view-audio" style={{ display: 'flex', flexDirection: 'column', width: '100%', gap: '12px' }}>
+    return <AudioPanel {...props} audioPitchShift={audioPitchShift} setAudioPitchShift={setAudioPitchShift} />
+  }
+  if (trackType === 'tone') {
+    return <TonePanel {...props} />
+  }
+  if (trackType === 'drum') {
+    return <DrumPanel {...props} />
+  }
+  if (trackType === 'vocaloid') {
+    return <VocaloidPanel {...props} />
+  }
+  return null
+}
+
+function AudioPanel({
+  isMicAllowed, onAllowMic, audioInputs, selectedInputId, setSelectedInputId,
+  audioOutputs, selectedOutputId, setSelectedOutputId, audioPitchShift, setAudioPitchShift
+}: any) {
+  return (
+    <div className="panel-view" id="view-audio" style={{ display: 'flex', flexDirection: 'column', width: '100%', gap: '12px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--accent)', fontSize: '13px', fontWeight: 700 }}>
           <i className="bx bx-microphone" /> Vocals
         </div>
 
         <div style={{ display: 'flex', gap: '15px', width: '100%', flexGrow: 1, alignItems: 'stretch' }}>
-          <div className="pitch-shift-card" style={{ 
-            width: '110px', 
-            background: 'rgba(255,255,255,0.02)', 
-            border: '1px solid rgba(255,255,255,0.08)', 
-            borderRadius: '8px', 
-            padding: '12px 10px', 
-            display: 'flex', 
-            flexDirection: 'column', 
-            alignItems: 'center', 
+          <div className="pitch-shift-card" style={{
+            width: '110px',
+            background: 'rgba(255,255,255,0.02)',
+            border: '1px solid rgba(255,255,255,0.08)',
+            borderRadius: '8px',
+            padding: '12px 10px',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
             gap: '12px',
             flexShrink: 0
           }}>
-            <button 
+            <button
               onClick={onAllowMic}
               style={{
                 width: '90px',
@@ -105,11 +125,11 @@ export default function InstrumentPanel({
 
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px', width: '100%' }}>
               <span style={{ fontSize: '10px', color: 'var(--text-muted)', fontWeight: 600 }}>Pitch Shift</span>
-              <Knob 
-                min={-12} 
-                max={12} 
-                value={audioPitchShift} 
-                onChange={(val) => setAudioPitchShift(Math.round(val))} 
+              <Knob
+                min={-12}
+                max={12}
+                value={audioPitchShift}
+                onChange={(val) => setAudioPitchShift(Math.round(val))}
                 displayValue={`${audioPitchShift > 0 ? '+' : ''}${Math.round(audioPitchShift)} st`}
               />
             </div>
@@ -118,11 +138,11 @@ export default function InstrumentPanel({
           <div style={{ flexGrow: 1, background: 'rgba(0,0,0,0.25)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '8px', padding: '12px', display: 'flex', flexDirection: 'column', gap: '8px', position: 'relative' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
               <span style={{ fontSize: '8px', fontWeight: 700, color: '#556', letterSpacing: '0.8px' }}>RECORDING WAVEFORM</span>
-              
+
               <div style={{ display: 'flex', gap: '10px' }}>
                 {audioInputs && audioInputs.length > 0 && (
-                  <select 
-                    value={selectedInputId} 
+                  <select
+                    value={selectedInputId}
                     onChange={(e) => setSelectedInputId?.(e.target.value)}
                     style={{ background: '#111', color: '#ccc', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '4px', fontSize: '9px', padding: '2px 6px', cursor: 'pointer' }}
                   >
@@ -133,8 +153,8 @@ export default function InstrumentPanel({
                 )}
 
                 {audioOutputs && audioOutputs.length > 0 && (
-                  <select 
-                    value={selectedOutputId} 
+                  <select
+                    value={selectedOutputId}
                     onChange={(e) => setSelectedOutputId?.(e.target.value)}
                     style={{ background: '#111', color: '#ccc', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '4px', fontSize: '9px', padding: '2px 6px', cursor: 'pointer' }}
                   >
@@ -147,9 +167,9 @@ export default function InstrumentPanel({
             </div>
 
             <div style={{ flexGrow: 1, position: 'relative', width: '100%', minHeight: '80px' }}>
-              <canvas 
-                className="waveform-canvas" 
-                style={{ width: '100%', height: '100%', background: '#090a0f', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.04)' }} 
+              <canvas
+                className="waveform-canvas"
+                style={{ width: '100%', height: '100%', background: '#090a0f', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.04)' }}
               />
               <div style={{ position: 'absolute', top: '50%', left: '4px', right: '4px', height: '2px', background: '#ff7b89', opacity: 0.6, pointerEvents: 'none', borderRadius: '1px' }} />
             </div>
@@ -157,9 +177,11 @@ export default function InstrumentPanel({
         </div>
       </div>
     )
-  }
+}
 
-  if (trackType === 'tone') {
+function TonePanel({
+  synthInstrument, setSynthInstrument, projectKey, setProjectKey, onPlayChordPad, onPlayPianoKey
+}: any) {
     const scales = [
       { name: 'C Major', chords: ['C', 'Dm', 'Em', 'F', 'G', 'Am', 'Bdim', 'C5'] },
       { name: 'D Minor', chords: ['Dm', 'Edim', 'F', 'Gm', 'Am', 'Bb', 'C', 'D5'] },
@@ -204,14 +226,14 @@ export default function InstrumentPanel({
       <div className="panel-view" id="view-keys" style={{ display: 'flex', flexDirection: 'column', width: '100%', height: '100%', alignItems: 'center', justifyContent: 'center', overflowY: 'auto' }}>
         <div style={{ display: 'flex', flexWrap: 'wrap', width: '100%', flexGrow: 1, gap: '40px', alignItems: 'flex-start', justifyContent: 'center', padding: '20px' }}>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '30px', width: '220px', flexShrink: 0 }}>
+          <div className="synth-settings" style={{ display: 'flex', flexDirection: 'column', gap: '30px', width: '220px', flexShrink: 0 }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
               <h4 style={{ fontSize: '12px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', textAlign: 'center', margin: 0 }}>
                 Synthesizer
               </h4>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                <select 
-                  value={synthInstrument} 
+                <select
+                  value={synthInstrument}
                   onChange={(e) => setSynthInstrument(e.target.value)}
                   style={{ padding: '8px 12px', background: 'var(--bg-card)', color: '#fff', border: '1px solid var(--border)', borderRadius: '6px', fontSize: '13px', width: '100%' }}
                 >
@@ -221,16 +243,16 @@ export default function InstrumentPanel({
                   <option value="harmonic-triangle">Harmonic Flute</option>
                   <option value="rhodes-fm">Rhodes Electric Piano</option>
                 </select>
-                <div 
+                <div
                   tabIndex={0}
-                  style={{ 
-                    display: 'flex', 
-                    alignItems: 'center', 
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
                     justifyContent: 'space-between',
-                    background: 'rgba(255,255,255,0.05)', 
-                    padding: '6px 12px', 
-                    borderRadius: '6px', 
-                    border: '1px solid var(--accent)', 
+                    background: 'rgba(255,255,255,0.05)',
+                    padding: '6px 12px',
+                    borderRadius: '6px',
+                    border: '1px solid var(--accent)',
                     cursor: 'pointer',
                     outline: 'none',
                     width: '100%'
@@ -266,19 +288,19 @@ export default function InstrumentPanel({
             </h4>
             <div className="chord-pads" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '15px', width: '100%' }}>
               {currentScale.chords.map((chord, idx) => (
-                <div 
-                  key={chord} 
+                <div
+                  key={chord}
                   className="chord-pad"
                   onClick={() => onPlayChordPad(chord, idx)}
-                  style={{ 
-                    padding: '15px 5px', 
-                    fontSize: '20px', 
-                    fontWeight: 700, 
-                    textAlign: 'center', 
-                    margin: 0, 
-                    height: 'auto', 
-                    display: 'flex', 
-                    justifyContent: 'center', 
+                  style={{
+                    padding: '15px 5px',
+                    fontSize: '20px',
+                    fontWeight: 700,
+                    textAlign: 'center',
+                    margin: 0,
+                    height: 'auto',
+                    display: 'flex',
+                    justifyContent: 'center',
                     alignItems: 'center',
                     background: 'var(--bg-card)',
                     border: '1px solid var(--border)',
@@ -311,13 +333,13 @@ export default function InstrumentPanel({
               Piano Keyboard
             </h4>
             <div className="piano-keys" id="piano-keys" style={{ height: '240px', justifyContent: 'center' }}>
-              {octaves.map((octave) => 
+              {octaves.map((octave) =>
                 octave.keys.map((key) => (
-                  <div 
+                  <div
                     key={key.noteName}
                     className={`piano-key ${key.type}`}
                     onClick={() => onPlayPianoKey(key.noteName, octave.oct, key.semis)}
-                    style={{ 
+                    style={{
                       height: key.type === 'white' ? '220px' : '140px',
                       width: key.type === 'white' ? '60px' : '38px',
                       marginLeft: key.type === 'black' ? '-19px' : '0',
@@ -335,16 +357,16 @@ export default function InstrumentPanel({
               )}
             </div>
           </div>
-          
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', flexShrink: 0 }}>
+
+          <div className="vst-input-container" style={{ display: 'flex', flexDirection: 'column', gap: '20px', flexShrink: 0 }}>
             <VstPanel />
           </div>
         </div>
       </div>
     )
-  }
+}
 
-  if (trackType === 'drum') {
+function DrumPanel({ onPlayDrumPad }: any) {
     const drums = [
       { name: 'Kick', type: 'kick', shortcut: '1' },
       { name: 'Snare', type: 'snare', shortcut: '2' },
@@ -361,7 +383,7 @@ export default function InstrumentPanel({
         <p className="hint">Tap drum pads or use keys [1] to [8] to play drum samples.</p>
         <div className="drum-pads" id="drum-pads">
           {drums.map((drum) => (
-            <div 
+            <div
               key={drum.name}
               className="drum-pad"
               onClick={() => onPlayDrumPad(drum.type)}
@@ -373,9 +395,11 @@ export default function InstrumentPanel({
         </div>
       </div>
     )
-  }
+}
 
-  if (trackType === 'vocaloid') {
+function VocaloidPanel({
+  vocaloidFolder, activeTrackId, setMidiEvents, midiEvents, setTrackAudioUrls
+}: any) {
     const ipcRenderer = (window as any).require ? (window as any).require('electron').ipcRenderer : null;
 
     const PRESETS = [
@@ -388,7 +412,9 @@ export default function InstrumentPanel({
       { id: 'taya', name: 'Taya Soune', alias: '蒼音タヤ', color: '#00d2ff', desc: 'Deep Ocean', baseFreq: 174.61 }
     ]
 
-    const [activeModel, setActiveModel] = React.useState<string | null>(null)
+    const [activeModel, setActiveModel] = React.useState<string | null>(() => {
+      return localStorage.getItem('vocaloidActiveModel') || null
+    })
     const [speed, setSpeed] = React.useState(1.0)
     const [pitch, setPitch] = React.useState(1.0)
     const [baseFreq, setBaseFreq] = React.useState(261.63)
@@ -407,18 +433,90 @@ export default function InstrumentPanel({
 
     const activePreset = getPresetInfo(activeModel || '')
 
+    const midiInputRef = React.useRef<HTMLInputElement>(null)
+
+    const handleImportMidi = async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0]
+      if (!file || !activeTrackId || !setMidiEvents) return
+
+      try {
+        const { Midi } = await import('@tonejs/midi')
+        const arrayBuffer = await file.arrayBuffer()
+        const parsedMidi = new Midi(arrayBuffer)
+        
+        if (parsedMidi.tracks.length > 0) {
+          const track = parsedMidi.tracks[0]
+          const newEvents: any[] = []
+          
+          track.notes.forEach(note => {
+            const freq = 440 * Math.pow(2, (note.midi - 69) / 12)
+            newEvents.push({
+              id: `ev-midi-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+              trackId: activeTrackId,
+              time: note.time,
+              type: 'vocaloid',
+              data: {
+                freq,
+                duration: note.duration,
+                type: 'vocaloid',
+                lyric: 'a'
+              }
+            })
+          })
+
+          if (newEvents.length > 0) {
+            setMidiEvents(prev => {
+              const otherNotes = prev.filter(ev => ev.trackId !== activeTrackId)
+              return [...otherNotes, ...newEvents].sort((a, b) => a.time - b.time)
+            })
+          }
+        }
+      } catch (err) {
+        console.error('Error parsing MIDI:', err)
+        alert('Failed to import MIDI.')
+      }
+      
+      if (midiInputRef.current) midiInputRef.current.value = ''
+    }
+
+    const handleMapLyrics = () => {
+      if (!text.trim() || !activeTrackId || !setMidiEvents) return
+      const tokens = text.trim().split(/[\s-]+/).filter(Boolean)
+      if (tokens.length === 0) return
+      
+      setMidiEvents(prev => {
+        const existingNotes = prev.filter(ev => ev.trackId === activeTrackId).sort((a, b) => a.time - b.time)
+        const otherNotes = prev.filter(ev => ev.trackId !== activeTrackId)
+        
+        const updatedNotes = existingNotes.map((note, index) => {
+          if (index < tokens.length) {
+            return { ...note, data: { ...note.data, lyric: tokens[index] } }
+          }
+          return note
+        })
+        
+        return [...otherNotes, ...updatedNotes].sort((a, b) => a.time - b.time)
+      })
+    }
+
     React.useEffect(() => {
       if (ipcRenderer) {
         ipcRenderer.invoke('list-models').then((res: string[]) => {
           setModels(res)
-          if (res.length > 0 && !activeModel) {
-            setActiveModel(res[0])
+          if (res.length > 0) {
+            const saved = localStorage.getItem('vocaloidActiveModel')
+            if (saved && res.includes(saved)) {
+              setActiveModel(saved)
+            } else if (!activeModel || !res.includes(activeModel)) {
+              setActiveModel(res[0])
+            }
           }
         }).catch(console.error)
       }
     }, [vocaloidFolder])
 
     React.useEffect(() => {
+      if (activeModel) localStorage.setItem('vocaloidActiveModel', activeModel)
       setBaseFreq(activePreset.baseFreq)
     }, [activeModel])
 
@@ -428,42 +526,73 @@ export default function InstrumentPanel({
       setAudioUrl(null)
       try {
         const modelName = activeModel || models[0] || 'TETO-English-150401'
-        const audioPath = await ipcRenderer.invoke('generate-tts', { 
-          text: text.trim(), 
-          model: modelName, 
-          speed, 
-          pitch 
+        const audioPath = await ipcRenderer.invoke('generate-tts', {
+          text: text.trim(),
+          model: modelName,
+          speed,
+          pitch
         })
         setRawAudioPath(audioPath)
-        setAudioUrl(`file:///${audioPath.replace(/\\/g, '/')}?t=${Date.now()}`)
+        const newUrl = `file:///${audioPath.replace(/\\/g, '/')}?t=${Date.now()}`
+        setAudioUrl(newUrl)
+        if (activeTrackId && setTrackAudioUrls) {
+          setTrackAudioUrls(prev => ({ ...prev, [activeTrackId]: newUrl }))
+        }
 
         // Map text tokens directly into MIDI notes on this track
         if (activeTrackId && setMidiEvents) {
           const tokens = text.trim().split(/[\s-]+/).filter(Boolean)
           if (tokens.length > 0) {
-            const beatDuration = 0.5 // 120 bpm quarter note
-            const newNotes = tokens.map((token, index) => {
-              const noteTime = index * beatDuration
-              const pitch = 60 // C4
-              const freq = 440 * Math.pow(2, (pitch - 69) / 12)
-              return {
-                id: `ev-tts-${Date.now()}-${index}-${Math.random().toString(36).substr(2, 4)}`,
-                trackId: activeTrackId,
-                time: noteTime,
-                type: 'vocaloid',
-                data: {
-                  freq,
-                  duration: beatDuration,
-                  type: 'vocaloid',
-                  lyric: token
+            setMidiEvents(prev => {
+              const existingNotes = prev.filter(ev => ev.trackId === activeTrackId).sort((a, b) => a.time - b.time)
+              const otherNotes = prev.filter(ev => ev.trackId !== activeTrackId)
+              
+              if (existingNotes.length > 0) {
+                const updatedNotes = existingNotes.map((note, index) => {
+                  if (index < tokens.length) {
+                    return { ...note, data: { ...note.data, lyric: tokens[index] } }
+                  }
+                  return note
+                })
+                
+                let finalNotes = [...updatedNotes]
+                if (tokens.length > existingNotes.length) {
+                  let lastNote = existingNotes[existingNotes.length - 1]
+                  let lastTime = lastNote.time + (lastNote.data.duration || 0.5)
+                  for (let i = existingNotes.length; i < tokens.length; i++) {
+                    finalNotes.push({
+                      id: `ev-tts-${Date.now()}-${i}-${Math.random().toString(36).substr(2, 4)}`,
+                      trackId: activeTrackId,
+                      time: lastTime,
+                      type: 'vocaloid',
+                      data: {
+                        freq: lastNote.data.freq,
+                        duration: 0.5,
+                        type: 'vocaloid',
+                        lyric: tokens[i]
+                      }
+                    })
+                    lastTime += 0.5
+                  }
                 }
+                return [...otherNotes, ...finalNotes]
+              } else {
+                const beatDuration = 0.5
+                const newNotes = tokens.map((token, index) => {
+                  const noteTime = index * beatDuration
+                  const pitch = 60 // C4
+                  const freq = 440 * Math.pow(2, (pitch - 69) / 12)
+                  return {
+                    id: `ev-tts-${Date.now()}-${index}-${Math.random().toString(36).substr(2, 4)}`,
+                    trackId: activeTrackId,
+                    time: noteTime,
+                    type: 'vocaloid',
+                    data: { freq, duration: beatDuration, type: 'vocaloid', lyric: token }
+                  }
+                })
+                return [...otherNotes, ...newNotes]
               }
             })
-            // Clear existing notes on active track first, and map the new ones
-            setMidiEvents(prev => [
-              ...prev.filter(ev => ev.trackId !== activeTrackId),
-              ...newNotes
-            ])
           }
         }
       } catch (error) {
@@ -474,11 +603,22 @@ export default function InstrumentPanel({
       }
     }
 
-    const handleSequenceGenerate = async () => {
-      if (!activeTrackId || !setTrackAudioUrls || !ipcRenderer) return
-      
-      const trackNotes = midiEvents.filter(ev => ev.trackId === activeTrackId)
+  useEffect(() => {
+    const handleAutoRender = () => {
+      handleSequenceGenerate()
+    }
+    window.addEventListener('request-vocaloid-render', handleAutoRender)
+    return () => window.removeEventListener('request-vocaloid-render', handleAutoRender)
+  }, [midiEvents, activeTrackId, speed, pitch, baseFreq])
+
+  const handleSequenceGenerate = async () => {
+    if (!activeTrackId || !setTrackAudioUrls || !ipcRenderer) return
+
+    const trackNotes = midiEvents.filter(ev => ev.trackId === activeTrackId)
       if (trackNotes.length === 0) {
+        if (text.trim()) {
+          return handleSingleGenerate()
+        }
         alert('No MIDI notes found on this track! Double click inside the MIDI Editor grid to add notes snapped to the grid.')
         return
       }
@@ -486,7 +626,7 @@ export default function InstrumentPanel({
       setIsSynthesizing(true)
       try {
         const modelName = activeModel || models[0] || 'TETO-English-150401'
-        
+
         const notesPayload = trackNotes.map(n => ({
           time: n.time,
           duration: n.data.duration || 0.5,
@@ -504,7 +644,7 @@ export default function InstrumentPanel({
         })
 
         const fileUrl = `file:///${audioPath.replace(/\\/g, '/')}?t=${Date.now()}`
-        
+
         setTrackAudioUrls(prev => ({
           ...prev,
           [activeTrackId]: fileUrl
@@ -544,7 +684,6 @@ export default function InstrumentPanel({
           }
         }, 150)
 
-        alert('Vocal Track Rendered Successfully! Play the session to hear it synced in real time.')
       } catch (error) {
         console.error(error)
         alert('Render failed. Make sure voicebank models and Python environment are ready.')
@@ -555,14 +694,14 @@ export default function InstrumentPanel({
 
     return (
       <div className="panel-view" id="view-vocaloid" style={{ display: 'flex', width: '100%', gap: '20px', color: '#fff', height: '100%', minHeight: '220px' }}>
-        
+
         {/* Left column: Preset Selection */}
         <div style={{ display: 'flex', flexDirection: 'column', width: '250px', flexShrink: 0, gap: '8px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2px' }}>
             <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
               Voice Models
             </div>
-            <button 
+            <button
               onClick={async () => {
                 if (ipcRenderer) {
                   const res = await ipcRenderer.invoke('select-vocaloid-folder')
@@ -588,7 +727,7 @@ export default function InstrumentPanel({
               const p = getPresetInfo(modelName)
               const isActive = activeModel === modelName
               return (
-                <div 
+                <div
                   key={modelName}
                   onClick={() => setActiveModel(modelName)}
                   style={{
@@ -617,32 +756,32 @@ export default function InstrumentPanel({
 
         {/* Center column: Parameters & Render controls */}
         <div style={{ display: 'flex', flex: 1, gap: '20px' }}>
-          
+
           {/* Slider details replaced with Knobs */}
           <div style={{ display: 'flex', flexDirection: 'column', width: '280px', gap: '12px', flexShrink: 0 }}>
             <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
               Voice Parameters
             </div>
-            
-            <div style={{ 
-              background: 'rgba(0,0,0,0.15)', 
-              border: '1px solid rgba(255,255,255,0.04)', 
-              padding: '16px', 
-              borderRadius: '8px', 
-              display: 'flex', 
-              gap: '20px', 
-              alignItems: 'center', 
+
+            <div style={{
+              background: 'rgba(0,0,0,0.15)',
+              border: '1px solid rgba(255,255,255,0.04)',
+              padding: '16px',
+              borderRadius: '8px',
+              display: 'flex',
+              gap: '20px',
+              alignItems: 'center',
               justifyContent: 'center',
               minHeight: '120px'
             }}>
               {/* Speed Knob */}
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px' }}>
                 <span style={{ fontSize: '10px', color: 'var(--text-muted)', fontWeight: 600 }}>Base Speed</span>
-                <Knob 
-                  min={0.5} 
-                  max={2.0} 
-                  value={speed} 
-                  onChange={setSpeed} 
+                <Knob
+                  min={0.5}
+                  max={2.0}
+                  value={speed}
+                  onChange={setSpeed}
                   displayValue={`${speed.toFixed(1)}x`}
                 />
               </div>
@@ -650,11 +789,11 @@ export default function InstrumentPanel({
               {/* Pitch Knob */}
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px' }}>
                 <span style={{ fontSize: '10px', color: 'var(--text-muted)', fontWeight: 600 }}>Pitch Scale</span>
-                <Knob 
-                  min={0.5} 
-                  max={2.0} 
-                  value={pitch} 
-                  onChange={setPitch} 
+                <Knob
+                  min={0.5}
+                  max={2.0}
+                  value={pitch}
+                  onChange={setPitch}
                   displayValue={`${pitch.toFixed(1)}x`}
                 />
               </div>
@@ -662,11 +801,11 @@ export default function InstrumentPanel({
               {/* Base Freq Knob */}
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px' }}>
                 <span style={{ fontSize: '10px', color: 'var(--text-muted)', fontWeight: 600 }}>UTAU Base</span>
-                <Knob 
-                  min={110.0} 
-                  max={440.0} 
-                  value={baseFreq} 
-                  onChange={setBaseFreq} 
+                <Knob
+                  min={110.0}
+                  max={440.0}
+                  value={baseFreq}
+                  onChange={setBaseFreq}
                   displayValue={`${baseFreq.toFixed(0)} Hz`}
                 />
               </div>
@@ -675,7 +814,7 @@ export default function InstrumentPanel({
 
           {/* Right section: TTS Preview & Sequences rendering */}
           <div style={{ display: 'flex', flexDirection: 'column', flex: 1, gap: '12px' }}>
-            
+
             {/* Sequence compile */}
             <div style={{ display: 'flex', flexDirection: 'column', background: 'var(--bg-card)', border: '1px solid rgba(255, 255, 255, 0.05)', backdropFilter: 'blur(8px)', borderRadius: '10px', padding: '16px', gap: '8px', justifyContent: 'center' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -685,7 +824,7 @@ export default function InstrumentPanel({
               <p style={{ fontSize: '10px', color: 'var(--text-muted)', margin: 0 }}>
                 Synthesize all MIDI notes inside this track using <strong>{activePreset.name}</strong>\'s voicebank. Each note\'s lyric text will be dynamically mapped to UTAU phonemes and pitched to match the timeline.
               </p>
-              <button 
+              <button
                 onClick={handleSequenceGenerate}
                 disabled={isSynthesizing}
                 style={{
@@ -729,15 +868,64 @@ export default function InstrumentPanel({
                   </>
                 )}
               </button>
+              
+              <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
+                <input
+                  type="file"
+                  accept=".mid,.midi"
+                  ref={midiInputRef}
+                  style={{ display: 'none' }}
+                  onChange={handleImportMidi}
+                />
+                <button
+                  onClick={() => midiInputRef.current?.click()}
+                  style={{
+                    background: 'rgba(255,255,255,0.05)',
+                    color: 'var(--text-main)',
+                    border: '1px solid rgba(255,255,255,0.1)',
+                    borderRadius: '6px',
+                    padding: '8px',
+                    fontSize: '11px',
+                    cursor: 'pointer',
+                    flex: 1,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '6px'
+                  }}
+                >
+                  <i className="bx bx-import" /> Import MIDI Notes
+                </button>
+                <button
+                  onClick={handleMapLyrics}
+                  disabled={!text.trim()}
+                  style={{
+                    background: 'rgba(255,255,255,0.05)',
+                    color: 'var(--text-main)',
+                    border: '1px solid rgba(255,255,255,0.1)',
+                    borderRadius: '6px',
+                    padding: '8px',
+                    fontSize: '11px',
+                    cursor: 'pointer',
+                    flex: 1,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '6px'
+                  }}
+                >
+                  <i className="bx bx-text" /> Map TTS Text to Notes
+                </button>
+              </div>
             </div>
 
             {/* Vocalizer TTS */}
             <div style={{ display: 'flex', flexDirection: 'column', background: 'rgba(255, 255, 255, 0.02)', border: '1px solid rgba(255, 255, 255, 0.05)', borderRadius: '10px', padding: '12px', gap: '6px' }}>
               <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-muted)' }}>PREVIEW SINGER (TTS VOICECHANGER)</span>
               <div style={{ display: 'flex', gap: '8px' }}>
-                <input 
-                  type="text" 
-                  value={text} 
+                <input
+                  type="text"
+                  value={text}
                   onChange={(e) => setText(e.target.value)}
                   placeholder={`Speak via ${activePreset.name}...`}
                   style={{
@@ -752,7 +940,7 @@ export default function InstrumentPanel({
                   }}
                   onKeyDown={(e) => e.key === 'Enter' && handleSingleGenerate()}
                 />
-                <button 
+                <button
                   onClick={handleSingleGenerate}
                   disabled={isSynthesizing || !text.trim()}
                   style={{
@@ -775,7 +963,7 @@ export default function InstrumentPanel({
               {audioUrl && (
                 <div style={{ display: 'flex', gap: '10px', alignItems: 'center', marginTop: '6px', background: 'rgba(0,0,0,0.2)', padding: '6px 10px', borderRadius: '6px' }}>
                   <audio controls src={audioUrl} autoPlay style={{ height: '24px', flex: 1 }}></audio>
-                  <button 
+                  <button
                     onClick={() => ipcRenderer.invoke('save-file', rawAudioPath)}
                     style={{
                       background: 'rgba(80, 250, 123, 0.1)',
@@ -813,7 +1001,4 @@ export default function InstrumentPanel({
 
       </div>
     )
-  }
-
-  return null
 }
