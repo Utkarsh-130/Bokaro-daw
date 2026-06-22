@@ -71,13 +71,15 @@ function bufferToWav(buffer: AudioBuffer) {
 }
 
 export default function App() {
-  const [projectTitle, setProjectTitle] = useState('My Premium Session')
+  const [projectTitle, setProjectTitle] = useState('Beamm')
   const [isPlaying, setIsPlaying] = useState(false)
   const [isRecording, setIsRecording] = useState(false)
   const [isMetronomeOn, setIsMetronomeOn] = useState(false)
   const [bpm, setBpm] = useState(90)
   const [projectKey, setProjectKey] = useState(0)
   const [timeSig, setTimeSig] = useState('1/4')
+  const [widthPerBeat, setWidthPerBeat] = useState(100)
+  const [trackHeight, setTrackHeight] = useState(90)
 
   const [tracks, setTracks] = useState<Track[]>([
     { id: '1', name: 'Vocal Recording', type: 'audio', muted: false, soloed: false, fxEnabled: true, color: `hsl(${Math.floor(Math.random() * 360)}, 70%, 60%)` },
@@ -105,6 +107,19 @@ export default function App() {
   const [vocaloidFolder, setVocaloidFolder] = useState(() => {
     return localStorage.getItem('vocaloidFolder') || ''
   })
+  useEffect(() => {
+    const theme = localStorage.getItem('lastTheme')
+    if (theme) {
+      let link = document.getElementById('custom-theme-css') as HTMLLinkElement
+      if (!link) {
+        link = document.createElement('link')
+        link.id = 'custom-theme-css'
+        link.rel = 'stylesheet'
+        document.head.appendChild(link)
+      }
+      link.href = `file:///${theme.replace(/\\/g, '/')}`
+    }
+  }, [])
 
   const [delayAmt, setDelayAmt] = useState(0.3)
   const [panAmt, setPanAmt] = useState(0.0)
@@ -147,6 +162,7 @@ export default function App() {
   const tracksRef = useRef(tracks)
   const isPlayingRef = useRef(isPlaying)
   const isRecordingRef = useRef(isRecording)
+  const widthPerBeatRef = useRef(widthPerBeat)
 
   useEffect(() => { isMetronomeOnRef.current = isMetronomeOn }, [isMetronomeOn])
   useEffect(() => { bpmRef.current = bpm }, [bpm])
@@ -154,6 +170,7 @@ export default function App() {
   useEffect(() => { tracksRef.current = tracks }, [tracks])
   useEffect(() => { isPlayingRef.current = isPlaying }, [isPlaying])
   useEffect(() => { isRecordingRef.current = isRecording }, [isRecording])
+  useEffect(() => { widthPerBeatRef.current = widthPerBeat }, [widthPerBeat])
 
   const loadAudioDevices = async () => {
     try {
@@ -210,6 +227,7 @@ export default function App() {
       const { ipcRenderer } = (window as any).require('electron')
       const cssPath = await ipcRenderer.invoke('select-css-file')
       if (cssPath) {
+        localStorage.setItem('lastTheme', cssPath)
         let link = document.getElementById('custom-theme-css') as HTMLLinkElement
         if (!link) {
           link = document.createElement('link')
@@ -428,7 +446,7 @@ export default function App() {
       if (timeTextEl) timeTextEl.textContent = formatTime(elapsed)
       
       const playheadEl = document.getElementById('playhead')
-      const currentX = (elapsed / 1000) * ((bpmRef.current / 60) * 100)
+      const currentX = (elapsed / 1000) * ((bpmRef.current / 60) * widthPerBeatRef.current)
       if (playheadEl) playheadEl.style.left = `${10 + currentX}px`
 
       if (isRecordingRef.current && activeTrackType === 'audio') {
@@ -496,8 +514,8 @@ export default function App() {
             const shouldMute = track?.muted || (isAnySoloed && !track?.soloed)
             
             if (!shouldMute) {
-              if (ev.type === 'tone' || ev.type === 'vocaloid') {
-                playTone(ev.data.freq, ev.type === 'vocaloid' ? 'basic-sine' : ev.data.type, ev.data.duration, true, tId)
+              if (ev.type === 'tone') {
+                playTone(ev.data.freq, synthInstrument, ev.data.duration, true, tId)
               } else if (ev.type === 'drum') {
                 playDrum(ev.data.type, true, tId)
               }
@@ -508,6 +526,38 @@ export default function App() {
       }
 
       animationIdRef.current = requestAnimationFrame(updatePlayhead)
+    }
+  }
+
+  const handleSetPlaybackTime = (time: number) => {
+    playbackTimeRef.current = time
+    const currentX = time * (bpm / 60) * widthPerBeatRef.current
+    const playheadEl = document.getElementById('playhead')
+    if (playheadEl) playheadEl.style.left = `${10 + currentX}px`
+    const timeTextEl = document.getElementById('time-text')
+    if (timeTextEl) timeTextEl.textContent = formatTime(time * 1000)
+    
+    if (isPlaying || isRecording) {
+      startTimeRef.current = performance.now() - time * 1000
+      
+      let idx = 0
+      const events = midiEventsRef.current
+      while (idx < events.length && events[idx].time < time) {
+        idx++
+      }
+      nextEventIdxRef.current = idx
+
+      const beatDuration = 60 / bpmRef.current
+      nextMetronomeBeatIdxRef.current = Math.floor(time / beatDuration)
+
+      tracksRef.current.forEach(track => {
+        if (track.type === 'audio' || track.type === 'vocaloid') {
+          const audioEl = document.getElementById(`vocal-playback-${track.id}`) as HTMLAudioElement
+          if (audioEl && audioEl.src) {
+            audioEl.currentTime = time
+          }
+        }
+      })
     }
   }
 
@@ -650,42 +700,62 @@ export default function App() {
     setTracks(tracks.map(t => t.id === trackId ? { ...t, name: newName } : t))
   }
 
+  const handleDeleteTrack = (trackId: string) => {
+    setTracks(tracks.filter(t => t.id !== trackId))
+    setMidiEvents(prev => prev.filter(ev => ev.trackId !== trackId))
+    if (activeTrackId === trackId) {
+      const remaining = tracks.filter(t => t.id !== trackId)
+      if (remaining.length > 0) {
+        setActiveTrackId(remaining[0].id)
+        setActiveTrackType(remaining[0].type)
+      } else {
+        setActiveTrackId('')
+      }
+    }
+  }
+
   const handleAddMidiEvent = (ev: MidiEvent) => {
     pushUndo()
     setMidiEvents(prev => [...prev, ev].sort((a, b) => a.time - b.time))
   }
 
   const handleUpdateMidiEvent = (noteId: string, updatedData: any) => {
-    setMidiEvents(prev => prev.map(ev => {
-      if (ev.id === noteId) {
-        return {
-          ...ev,
-          ...updatedData,
-          data: {
-            ...ev.data,
-            ...(updatedData.data || {})
+    setMidiEvents(prev => {
+      const updated = prev.map(ev => {
+        if (ev.id === noteId) {
+          return {
+            ...ev,
+            ...updatedData,
+            data: {
+              ...ev.data,
+              ...(updatedData.data || {})
+            }
           }
         }
-      }
-      return ev
-    }))
+        return ev
+      })
+      return updated.sort((a, b) => a.time - b.time)
+    })
   }
 
   const handleUpdateMidiEvents = (updates: { id: string, updatedData: any }[]) => {
-    setMidiEvents(prev => prev.map(ev => {
-      const match = updates.find(u => u.id === ev.id)
-      if (match) {
-        return {
-          ...ev,
-          ...match.updatedData,
-          data: {
-            ...ev.data,
-            ...(match.updatedData.data || {})
+    setMidiEvents(prev => {
+      const updated = prev.map(ev => {
+        const match = updates.find(u => u.id === ev.id)
+        if (match) {
+          return {
+            ...ev,
+            ...match.updatedData,
+            data: {
+              ...ev.data,
+              ...(match.updatedData.data || {})
+            }
           }
         }
-      }
-      return ev
-    }))
+        return ev
+      })
+      return updated.sort((a, b) => a.time - b.time)
+    })
   }
 
   const handleDeleteMidiEvent = (noteId: string) => {
@@ -697,7 +767,7 @@ export default function App() {
     const track = tracks.find(t => t.id === trackId)
     if (!track) return
 
-    const beatPx = 100
+    const beatPx = widthPerBeat
     let snapUnit = 1.0
     if (timeSig === '1/2') snapUnit = 0.5
     else if (timeSig === '1/4') snapUnit = 0.25
@@ -706,9 +776,9 @@ export default function App() {
     
     const snapPx = beatPx * snapUnit
     const snappedDropX = Math.round(dropX / snapPx) * snapPx
-    const snappedTime = Math.max(0, (snappedDropX / 100) / (bpm / 60))
+    const snappedTime = Math.max(0, (snappedDropX / widthPerBeat) / (bpm / 60))
 
-    const targetType = track.type === 'tone' ? 'tone' : 'drum'
+    const targetType = track.type === 'tone' ? 'tone' : track.type === 'vocaloid' ? 'vocaloid' : 'drum'
     let updatedData: any = {
       trackId,
       time: snappedTime,
@@ -722,6 +792,13 @@ export default function App() {
           freq: 261.63,
           duration: 0.5,
           type: synthInstrument
+        }
+      } else if (targetType === 'vocaloid') {
+        updatedData.data = {
+          freq: 261.63,
+          duration: 0.5,
+          type: 'vocaloid',
+          lyric: 'a'
         }
       } else {
         updatedData.data = {
@@ -1151,6 +1228,163 @@ export default function App() {
     }
   }
 
+  const handleExportMmpz = async () => {
+    let xml = `<?xml version="1.0"?>\n<!DOCTYPE lmms-project>\n<lmms-project type="song" version="1.0">\n<head/>\n<song>\n<trackcontainer>\n`
+    tracks.forEach(t => {
+      xml += `<track name="${t.name.replace(/"/g, '&quot;')}" type="0" muted="${t.muted ? 1 : 0}" solo="${t.soloed ? 1 : 0}" color="${t.color || ''}" dawType="${t.type}">\n`
+      xml += `<pattern>\n`
+      midiEvents.filter(ev => ev.trackId === t.id).forEach(ev => {
+        const tick = Math.round(ev.time * 48)
+        const len = Math.round((ev.data.duration || 0.2) * 48)
+        let key = 60
+        if (ev.data.freq) key = Math.round(69 + 12 * Math.log2(ev.data.freq / 440))
+        xml += `<note key="${key}" pos="${tick}" len="${len}" vol="100" pan="0"/>\n`
+      })
+      xml += `</pattern>\n</track>\n`
+    })
+    xml += `</trackcontainer>\n</song>\n</lmms-project>`
+
+    try {
+      const stream = new Blob([xml], { type: 'text/xml' }).stream()
+      const compressed = stream.pipeThrough(new CompressionStream('deflate'))
+      const res = await new Response(compressed).blob()
+      const url = URL.createObjectURL(res)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${projectTitle.toLowerCase().replace(/\s+/g, '_')}_session.mmpz`
+      a.click()
+    } catch(e) {
+      const url = URL.createObjectURL(new Blob([xml], { type: 'text/xml' }))
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${projectTitle.toLowerCase().replace(/\s+/g, '_')}_session.mmp`
+      a.click()
+    }
+  }
+
+  const handleNewProject = () => {
+    setProjectTitle('New Project')
+    setTracks([{ id: '1', name: 'Vocal Recording', type: 'audio', muted: false, soloed: false, fxEnabled: true, color: `hsl(${Math.floor(Math.random() * 360)}, 70%, 60%)` }])
+    setMidiEvents([])
+    setUndoStack([])
+    setRedoStack([])
+    setActiveTrackId('1')
+    setActiveTrackType('audio')
+  }
+
+  const handleImportMmpz = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if ((file as any).path) localStorage.setItem('lastProject', (file as any).path)
+    let xmlText = ''
+    try {
+      if (file.name.endsWith('.mmpz')) {
+        const ds = new DecompressionStream('deflate')
+        const stream = file.stream().pipeThrough(ds)
+        xmlText = await new Response(stream).text()
+      } else {
+        xmlText = await file.text()
+      }
+    } catch (err) {
+      console.error(err)
+      return
+    }
+
+    const doc = new DOMParser().parseFromString(xmlText, 'text/xml')
+    const trackNodes = doc.querySelectorAll('trackcontainer > track')
+    
+    const newTracks: Track[] = []
+    const newMidiEvents: MidiEvent[] = []
+
+    trackNodes.forEach((tNode, idx) => {
+      const name = tNode.getAttribute('name') || `Track ${idx + 1}`
+      const muted = tNode.getAttribute('muted') === '1'
+      const soloed = tNode.getAttribute('solo') === '1'
+      const color = tNode.getAttribute('color') || `hsl(${Math.floor(Math.random() * 360)}, 70%, 60%)`
+      const type = tNode.getAttribute('dawType') || 'tone'
+      const tId = (idx + 1).toString()
+      newTracks.push({
+        id: tId, name, type, muted, soloed, fxEnabled: true,
+        color
+      })
+      tNode.querySelectorAll('pattern > note').forEach((nNode, nIdx) => {
+        const key = parseInt(nNode.getAttribute('key') || '60')
+        const pos = parseInt(nNode.getAttribute('pos') || '0')
+        const len = parseInt(nNode.getAttribute('len') || '48')
+        newMidiEvents.push({
+          id: `ev-${Date.now()}-${idx}-${nIdx}`,
+          trackId: tId,
+          time: pos / 48,
+          type: type === 'drum' ? 'drum' : type === 'vocaloid' ? 'vocaloid' : 'tone',
+          data: { freq: 440 * Math.pow(2, (key - 69) / 12), duration: len / 48, type: type === 'vocaloid' ? 'vocaloid' : 'basic-sine' }
+        })
+      })
+    })
+
+    if (newTracks.length > 0) {
+      setTracks(newTracks)
+      setMidiEvents(newMidiEvents)
+      setProjectTitle(file.name.replace(/\.[^/.]+$/, ""))
+      setActiveTrackId(newTracks[0].id)
+      setActiveTrackType(newTracks[0].type)
+    }
+  }
+
+  const handleOpenPreviousProject = async () => {
+    const prevProj = localStorage.getItem('lastProject')
+    if (prevProj && (window as any).require) {
+      const fs = (window as any).require('fs')
+      if (fs.existsSync(prevProj)) {
+        try {
+          const buffer = fs.readFileSync(prevProj)
+          let xmlText = ''
+          if (prevProj.endsWith('.mmpz')) {
+            const zlib = (window as any).require('zlib')
+            xmlText = zlib.inflateSync(buffer).toString()
+          } else {
+            xmlText = buffer.toString()
+          }
+          const doc = new DOMParser().parseFromString(xmlText, 'text/xml')
+          const trackNodes = doc.querySelectorAll('trackcontainer > track')
+          const newTracks: Track[] = []
+          const newMidiEvents: MidiEvent[] = []
+          trackNodes.forEach((tNode, idx) => {
+            const name = tNode.getAttribute('name') || `Track ${idx + 1}`
+            const muted = tNode.getAttribute('muted') === '1'
+            const soloed = tNode.getAttribute('solo') === '1'
+            const color = tNode.getAttribute('color') || `hsl(${Math.floor(Math.random() * 360)}, 70%, 60%)`
+            const type = tNode.getAttribute('dawType') || 'tone'
+            const tId = (idx + 1).toString()
+            newTracks.push({
+              id: tId, name, type, muted, soloed, fxEnabled: true,
+              color
+            })
+            tNode.querySelectorAll('pattern > note').forEach((nNode, nIdx) => {
+              const key = parseInt(nNode.getAttribute('key') || '60')
+              const pos = parseInt(nNode.getAttribute('pos') || '0')
+              const len = parseInt(nNode.getAttribute('len') || '48')
+              newMidiEvents.push({
+                id: `ev-${Date.now()}-${idx}-${nIdx}`,
+                trackId: tId,
+                time: pos / 48,
+                type: type === 'drum' ? 'drum' : type === 'vocaloid' ? 'vocaloid' : 'tone',
+                data: { freq: 440 * Math.pow(2, (key - 69) / 12), duration: len / 48, type: type === 'vocaloid' ? 'vocaloid' : 'basic-sine' }
+              })
+            })
+          })
+          if (newTracks.length > 0) {
+            setTracks(newTracks)
+            setMidiEvents(newMidiEvents)
+            const pathNode = (window as any).require('path')
+            setProjectTitle(pathNode.basename(prevProj).replace(/\.[^/.]+$/, ""))
+            setActiveTrackId(newTracks[0].id)
+            setActiveTrackType(newTracks[0].type)
+          }
+        } catch(e) { console.error(e) }
+      }
+    }
+  }
+
   const handleTranspose = (semitones: number) => {
     pushUndo()
     setMidiEvents(prev => prev.map(ev => {
@@ -1191,7 +1425,7 @@ export default function App() {
       startTimeRef.current = performance.now() - maxT * 1000
     }
     
-    const currentX = maxT * (bpm / 60) * 100
+    const currentX = maxT * (bpm / 60) * widthPerBeatRef.current
     const playheadEl = document.getElementById('playhead')
     if (playheadEl) playheadEl.style.left = `${10 + currentX}px`
     const timeTextEl = document.getElementById('time-text')
@@ -1201,6 +1435,7 @@ export default function App() {
   useEffect(() => {
     const handleGlobalKeyDown = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement
+      if ((window as any).__isPromptOpen) return
       if (target.tagName === 'INPUT' || target.getAttribute('contenteditable') === 'true') return
       
       const keyMap3: Record<string, number> = {
@@ -1220,22 +1455,26 @@ export default function App() {
       } else if (e.key === 'ArrowRight') {
         e.preventDefault()
         handleSkipNext()
-      } else if (keyMap3[e.key] !== undefined) {
-        handlePlayPianoKey(e.key.toUpperCase(), 3, keyMap3[e.key])
-      } else if (keyMap4[e.key] !== undefined) {
-        handlePlayPianoKey(e.key.toUpperCase(), 4, keyMap4[e.key])
-      } else if (drumMap.includes(e.key)) {
-        const drumTypes = ['kick', 'snare', 'hihat', 'openhat', 'clap', 'tom1', 'tom2', 'crash']
-        handlePlayDrumPad(drumTypes[parseInt(e.key) - 1])
-      } else if (e.shiftKey && e.key === 'ArrowUp') {
-        handleTranspose(1)
-      } else if (e.shiftKey && e.key === 'ArrowDown') {
-        handleTranspose(-1)
+      } else if (activeTrackType === 'tone' || activeTrackType === 'vocaloid') {
+        if (keyMap3[e.key] !== undefined) {
+          handlePlayPianoKey(e.key.toUpperCase(), 3, keyMap3[e.key])
+        } else if (keyMap4[e.key] !== undefined) {
+          handlePlayPianoKey(e.key.toUpperCase(), 4, keyMap4[e.key])
+        } else if (e.shiftKey && e.key === 'ArrowUp') {
+          handleTranspose(1)
+        } else if (e.shiftKey && e.key === 'ArrowDown') {
+          handleTranspose(-1)
+        }
+      } else if (activeTrackType === 'drum') {
+        if (drumMap.includes(e.key)) {
+          const drumTypes = ['kick', 'snare', 'hihat', 'openhat', 'clap', 'tom1', 'tom2', 'crash']
+          handlePlayDrumPad(drumTypes[parseInt(e.key) - 1])
+        }
       }
     }
     window.addEventListener('keydown', handleGlobalKeyDown)
     return () => window.removeEventListener('keydown', handleGlobalKeyDown)
-  }, [activeTrackId, synthInstrument, isRecording, midiEvents, isPlaying])
+  }, [activeTrackId, activeTrackType, synthInstrument, isRecording, midiEvents, isPlaying])
 
   return (
     <div className="daw-container">
@@ -1262,6 +1501,10 @@ export default function App() {
         onRedo={handleRedo}
         onFileImport={handleFileImport}
         onSaveWav={handleSaveWav}
+        onExportMmpz={handleExportMmpz}
+        onImportMmpz={handleImportMmpz}
+        onOpenPreviousProject={handleOpenPreviousProject}
+        onNewProject={handleNewProject}
         onLoadCss={handleLoadCss}
       />
 
@@ -1274,8 +1517,10 @@ export default function App() {
           onToggleSolo={handleToggleSolo}
           onToggleFx={handleToggleFx}
           onRenameTrack={handleRenameTrack}
+          onDeleteTrack={handleDeleteTrack}
           onAddTrack={() => setActiveModal('addTrack')}
           onShowFxPanel={() => setActiveTab('fx')}
+          trackHeight={trackHeight}
         />
         <Timeline 
           tracks={tracks}
@@ -1286,6 +1531,12 @@ export default function App() {
           onDropNoteOnTimeline={handleDropNoteOnTimeline}
           onOpenMidiEditor={() => setActiveTab('midi')}
           trackAudioUrls={trackAudioUrls}
+          onSetPlaybackTime={handleSetPlaybackTime}
+          widthPerBeat={widthPerBeat}
+          setWidthPerBeat={setWidthPerBeat}
+          trackHeight={trackHeight}
+          setTrackHeight={setTrackHeight}
+          onUpdateMidiEvent={handleUpdateMidiEvent}
         />
       </main>
 
@@ -1350,6 +1601,7 @@ export default function App() {
             onUpdateMidiEvent={handleUpdateMidiEvent}
             onUpdateMidiEvents={handleUpdateMidiEvents}
             onDeleteMidiEvent={handleDeleteMidiEvent}
+            trackAudioUrls={trackAudioUrls}
           />
         )}
       </BottomPanel>
