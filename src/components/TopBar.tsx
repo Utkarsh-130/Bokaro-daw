@@ -27,6 +27,8 @@ interface TopBarProps {
   onOpenPreviousProject: () => void
   onNewProject: () => void
   onLoadCss: () => void
+  showAutomation: boolean
+  onAutomationToggle: () => void
 }
 
 export default function TopBar({
@@ -55,7 +57,9 @@ export default function TopBar({
   onImportMmpz,
   onOpenPreviousProject,
   onNewProject,
-  onLoadCss
+  onLoadCss,
+  showAutomation,
+  onAutomationToggle
 }: TopBarProps) {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const mmpzInputRef = useRef<HTMLInputElement>(null)
@@ -192,16 +196,41 @@ export default function TopBar({
       <div className="project-settings">
         <button 
           className="btn" 
+          onClick={onAutomationToggle}
+          style={{ 
+            background: showAutomation ? 'var(--accent-glow)' : 'var(--bg-card)',
+            color: showAutomation ? 'var(--accent)' : 'var(--text-muted)',
+            borderColor: showAutomation ? 'var(--accent)' : 'var(--border)',
+            marginRight: '8px',
+            width: '32px',
+            padding: 0,
+            display: 'flex',
+            justifyContent: 'center'
+          }}
+          title="Toggle Automation"
+        >
+          <i className="bx bx-line-chart" style={{ fontSize: '18px' }} />
+        </button>
+        <button 
+          className="btn" 
           onClick={onMetronomeToggle}
           style={{ 
             background: isMetronomeOn ? 'var(--accent-glow)' : 'var(--bg-card)',
             color: isMetronomeOn ? 'var(--accent)' : 'var(--text-muted)',
             borderColor: isMetronomeOn ? 'var(--accent)' : 'var(--border)',
-            marginRight: '8px'
+            marginRight: '8px',
+            width: '32px',
+            padding: 0,
+            display: 'flex',
+            justifyContent: 'center'
           }}
           title="Toggle Metronome"
         >
-          <i className="bx bx-pulse" /> Metronome
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M10 2h4l4 20H6z" opacity="0.8"/>
+            <path d="M12 2v18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeDasharray="1 3"/>
+            <circle cx="12" cy="11" r="2.5" fill="var(--bg-card)" stroke="currentColor" strokeWidth="1.5" />
+          </svg>
         </button>
         <div className="setting-box">
           <select 

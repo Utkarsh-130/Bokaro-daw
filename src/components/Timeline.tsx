@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react'
+import { AutomationPoint } from '../App.tsx'
 
 interface Track {
   id: string
@@ -8,6 +9,9 @@ interface Track {
   soloed: boolean
   fxEnabled: boolean
   color?: string
+  volume?: number
+  pan?: number
+  volumeAutomation?: AutomationPoint[]
 }
 
 interface MidiEvent {
@@ -33,6 +37,8 @@ interface TimelineProps {
   trackHeight: number
   setTrackHeight: React.Dispatch<React.SetStateAction<number>>
   onUpdateMidiEvent?: (noteId: string, updatedData: any) => void
+  onUpdateAutomation?: (trackId: string, automation: AutomationPoint[]) => void
+  showAutomation: boolean
 }
 
 export default function Timeline({ 
@@ -49,7 +55,9 @@ export default function Timeline({
   setWidthPerBeat,
   trackHeight,
   setTrackHeight,
-  onUpdateMidiEvent
+  onUpdateMidiEvent,
+  onUpdateAutomation,
+  showAutomation
 }: TimelineProps) {
   const timelineRef = useRef<HTMLDivElement>(null)
   
@@ -149,14 +157,101 @@ export default function Timeline({
     onSetPlaybackTime(Math.max(0, time))
   }
 
+  const handleSvgDoubleClick = (e: React.MouseEvent, trackId: string, track: Track) => {
+    if (!showAutomation) return
+    const rect = e.currentTarget.getBoundingClientRect()
+    const clickX = e.clientX - rect.left
+    const clickY = e.clientY - rect.top
+    const time = (clickX / widthPerBeat) / (bpm / 60)
+    const value = 1 - (clickY / trackHeight)
+    
+    const newPoint = { id: `pt-${Date.now()}`, time: Math.max(0, time), value: Math.max(0, Math.min(1, value)) }
+    const points = track.volumeAutomation ? [...track.volumeAutomation] : []
+    points.push(newPoint)
+    points.sort((a, b) => a.time - b.time)
+    if (onUpdateAutomation) onUpdateAutomation(trackId, points)
+  }
+
+  const handlePointMouseDown = (e: React.MouseEvent, trackId: string, pointId: string, track: Track) => {
+    e.stopPropagation()
+    if (e.button === 2) {
+      // right click to delete
+      const points = (track.volumeAutomation || []).filter(p => p.id !== pointId)
+      if (onUpdateAutomation) onUpdateAutomation(trackId, points)
+      return
+    }
+
+    const startX = e.clientX
+    const startY = e.clientY
+    
+    const point = track.volumeAutomation?.find(p => p.id === pointId)
+    if (!point) return
+    
+    const startTime = point.time
+    const startValue = point.value
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      const deltaX = moveEvent.clientX - startX
+      const deltaY = moveEvent.clientY - startY
+      
+      const deltaTime = (deltaX / widthPerBeat) / (bpm / 60)
+      const deltaValue = -(deltaY / trackHeight)
+      
+      const newTime = Math.max(0, startTime + deltaTime)
+      const newValue = Math.max(0, Math.min(1, startValue + deltaValue))
+      
+      const points = (track.volumeAutomation || []).map(p => 
+        p.id === pointId ? { ...p, time: newTime, value: newValue } : p
+      )
+      points.sort((a, b) => a.time - b.time)
+      if (onUpdateAutomation) onUpdateAutomation(trackId, points)
+    }
+
+    const handleMouseUp = () => {
+      window.removeEventListener('mousemove', handleMouseMove)
+      window.removeEventListener('mouseup', handleMouseUp)
+    }
+
+    window.addEventListener('mousemove', handleMouseMove)
+    window.addEventListener('mouseup', handleMouseUp)
+  }
+
+  const handlePlayheadMouseDown = (e: React.MouseEvent) => {
+    e.preventDefault()
+    if (!onSetPlaybackTime) return
+
+    const startX = e.clientX
+    const mainContent = document.querySelector('.main-content') as HTMLElement
+    if (!mainContent) return
+    const startScroll = mainContent.scrollLeft
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      const rect = timelineRef.current?.getBoundingClientRect()
+      if (!rect) return
+      
+      const clickX = Math.max(0, moveEvent.clientX - rect.left - 10)
+      const time = (clickX / widthPerBeat) / (bpm / 60)
+      onSetPlaybackTime(Math.max(0, time))
+    }
+
+    const handleMouseUp = () => {
+      window.removeEventListener('mousemove', handleMouseMove)
+      window.removeEventListener('mouseup', handleMouseUp)
+    }
+
+    window.addEventListener('mousemove', handleMouseMove)
+    window.addEventListener('mouseup', handleMouseUp)
+  }
+
   return (
-    <div ref={timelineRef} className="timeline" id="timeline" style={{ minWidth: `${beats.length * widthPerBeat + 100}px` }}>
+    <div ref={timelineRef} className="timeline" id="timeline" style={{ minWidth: `${beats.length * widthPerBeat + 100}px`, position: 'relative' }}>
+      
       <div 
         className="ruler" 
         id="ruler"
         onMouseDown={handleRulerMouseDown}
         onDoubleClick={handleRulerDoubleClick}
-        style={{ cursor: 'grab', userSelect: 'none' }}
+        style={{ cursor: 'grab', userSelect: 'none', marginTop: '-30px' }}
       >
         {beats.map((beat) => (
           <div 
@@ -169,7 +264,7 @@ export default function Timeline({
         ))}
       </div>
 
-      <div className="playhead" id="playhead" />
+      <div className="playhead" id="playhead" onMouseDown={handlePlayheadMouseDown} />
 
       <div className="timeline-tracks" id="timeline-tracks">
         {tracks.map((track) => {
@@ -181,11 +276,11 @@ export default function Timeline({
               key={track.id} 
               className={`timeline-track ${track.id === activeTrackId ? 'active-tl' : ''}`}
               id={`timeline-track-${track.id}`}
-              style={{ height: `${trackHeight}px` }}
+              style={{ height: `${trackHeight}px`, position: 'relative' }}
               onClick={() => onSelectTrack(track.id, track.type)}
               onDoubleClick={() => {
                 onSelectTrack(track.id, track.type)
-                onOpenMidiEditor()
+                if (!showAutomation) onOpenMidiEditor()
               }}
               onDragOver={handleDragOver}
               onDrop={(e) => handleDrop(e, track.id, track.type)}
@@ -248,6 +343,49 @@ export default function Timeline({
                     )
                   })}
                 </div>
+              )}
+
+              {/* Automation Overlay */}
+              {showAutomation && (
+                <svg 
+                  style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: 10, pointerEvents: 'auto', background: 'rgba(0,0,0,0.1)' }}
+                  onDoubleClick={(e) => handleSvgDoubleClick(e, track.id, track)}
+                  onContextMenu={(e) => e.preventDefault()}
+                >
+                  {(() => {
+                    const points = track.volumeAutomation || []
+                    if (points.length === 0) return null
+                    const pts = points.map(p => {
+                      const cx = p.time * (bpm / 60) * widthPerBeat
+                      const cy = (1 - p.value) * trackHeight
+                      return `${cx},${cy}`
+                    }).join(' ')
+                    
+                    return (
+                      <>
+                        <polyline points={pts} fill="none" stroke="#ff7b89" strokeWidth="2" />
+                        {points.map(p => {
+                          const cx = p.time * (bpm / 60) * widthPerBeat
+                          const cy = (1 - p.value) * trackHeight
+                          return (
+                            <circle 
+                              key={p.id}
+                              cx={cx} 
+                              cy={cy} 
+                              r="5" 
+                              fill="#ff7b89" 
+                              stroke="#fff"
+                              strokeWidth="1"
+                              style={{ cursor: 'pointer' }}
+                              onMouseDown={(e) => handlePointMouseDown(e, track.id, p.id, track)}
+                              onContextMenu={(e) => e.preventDefault()}
+                            />
+                          )
+                        })}
+                      </>
+                    )
+                  })()}
+                </svg>
               )}
             </div>
           )
