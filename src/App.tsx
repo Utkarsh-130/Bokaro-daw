@@ -8,6 +8,13 @@ import FxPanel from './components/FxPanel.tsx'
 import MidiEditor from './components/MidiEditor.tsx'
 import Modal from './components/Modal.tsx'
 import TitleBar from './components/TitleBar.tsx'
+import MixerPanel from './components/MixerPanel.tsx'
+
+export interface AutomationPoint {
+  id: string
+  time: number
+  value: number
+}
 
 interface Track {
   id: string
@@ -17,6 +24,27 @@ interface Track {
   soloed: boolean
   fxEnabled: boolean
   color?: string
+  volume?: number
+  pan?: number
+  volumeAutomation?: AutomationPoint[]
+  auraPreset?: number
+  auraLevel?: number
+  auraMagic?: boolean
+}
+
+export interface EqBand {
+  freq: number
+  gain: number
+  type: BiquadFilterType
+  Q: number
+}
+
+export interface FxPlugin {
+  id: string
+  type: string
+  amount: number
+  enabled: boolean
+  bands?: EqBand[]
 }
 
 interface MidiEvent {
@@ -104,6 +132,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState('instrument')
   const [panelHeight, setPanelHeight] = useState(260)
   const [activeModal, setActiveModal] = useState<string | null>(null)
+  const [showAutomation, setShowAutomation] = useState(false)
   const [vocaloidFolder, setVocaloidFolder] = useState(() => {
     return localStorage.getItem('vocaloidFolder') || ''
   })
@@ -121,12 +150,13 @@ export default function App() {
     }
   }, [])
 
-  const [delayAmt, setDelayAmt] = useState(0.3)
-  const [panAmt, setPanAmt] = useState(0.0)
-  const [reverbAmt, setReverbAmt] = useState(0.2)
-  const [delayEnabled, setDelayEnabled] = useState(true)
-  const [panEnabled, setPanEnabled] = useState(true)
-  const [reverbEnabled, setReverbEnabled] = useState(true)
+  const [fxChain, setFxChain] = useState<FxPlugin[]>([
+    { id: 'fx-delay', type: 'delay', amount: 0.3, enabled: true },
+    { id: 'fx-pan', type: 'pan', amount: 0.0, enabled: true },
+    { id: 'fx-reverb', type: 'reverb', amount: 0.2, enabled: true },
+    { id: 'fx-vst', type: 'vst', amount: 1.0, enabled: true }
+  ])
+  const [masterVolume, setMasterVolume] = useState(1.0)
 
   const [synthInstrument, setSynthInstrument] = useState('rhodes-fm')
 
@@ -152,9 +182,20 @@ export default function App() {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const audioChunksRef = useRef<Blob[]>([])
 
-  const delayNodeRef = useRef<DelayNode | null>(null)
-  const panNodeRef = useRef<StereoPannerNode | null>(null)
-  const reverbNodeRef = useRef<ConvolverNode | null>(null)
+  const masterGainNodeRef = useRef<GainNode | null>(null)
+  const masterAnalyserRef = useRef<AnalyserNode | null>(null)
+
+  // Dynamic FX nodes
+  const fxNodesMapRef = useRef<Record<string, { node: AudioNode | any, outNode?: AudioNode, internalNodes?: any[], type: string }>>({})
+  const fxChainRef = useRef(fxChain)
+  useEffect(() => { fxChainRef.current = fxChain }, [fxChain])
+
+  interface TrackNodes {
+    gainNode: GainNode;
+    pannerNode?: StereoPannerNode;
+    analyserNode: AnalyserNode;
+  }
+  const trackNodesRef = useRef<Record<string, TrackNodes>>({})
 
   const isMetronomeOnRef = useRef(isMetronomeOn)
   const bpmRef = useRef(bpm)
@@ -265,31 +306,17 @@ export default function App() {
     if (!audioCtxRef.current) {
       const AudioCtx = window.AudioContext || (window as any).webkitAudioContext
       audioCtxRef.current = new AudioCtx()
-      
+
       const ctx = audioCtxRef.current
-      delayNodeRef.current = ctx.createDelay(5.0)
-      panNodeRef.current = ctx.createStereoPanner()
-      
-      const reverb = ctx.createConvolver()
-      const rate = ctx.sampleRate
-      const len = rate * 2.0
-      const decay = 2.0
-      const impulse = ctx.createBuffer(2, len, rate)
-      for (let i = 0; i < 2; i++) {
-        const channel = impulse.getChannelData(i)
-        for (let j = 0; j < len; j++) {
-          channel[j] = (Math.random() * 2 - 1) * Math.pow(1 - j / len, decay)
-        }
+
+      if (!masterGainNodeRef.current) {
+        masterGainNodeRef.current = ctx.createGain()
+        masterGainNodeRef.current.gain.value = masterVolume
+        masterAnalyserRef.current = ctx.createAnalyser()
+        masterAnalyserRef.current.fftSize = 256
+        masterGainNodeRef.current.connect(masterAnalyserRef.current)
+        masterAnalyserRef.current.connect(ctx.destination)
       }
-      reverb.buffer = impulse
-      reverbNodeRef.current = reverb
-
-      delayNodeRef.current.delayTime.value = delayAmt
-      panNodeRef.current.pan.value = panAmt
-
-      delayNodeRef.current.connect(ctx.destination)
-      panNodeRef.current.connect(ctx.destination)
-      reverbNodeRef.current.connect(ctx.destination)
 
       if (selectedOutputId && (ctx as any).setSinkId) {
         (ctx as any).setSinkId(selectedOutputId).catch((e: any) => console.error(e))
@@ -301,36 +328,346 @@ export default function App() {
     }
   }
 
+  // Rebuild FX chain nodes when fxChain state changes
   useEffect(() => {
-    if (delayNodeRef.current) {
-      delayNodeRef.current.delayTime.value = delayAmt * 1.5
-    }
-  }, [delayAmt])
+    const ctx = audioCtxRef.current
+    if (!ctx) return
+
+    // Disconnect old nodes
+    Object.values(fxNodesMapRef.current).forEach(n => {
+      try { n.node.disconnect() } catch (e) { }
+    })
+
+    // Create new nodes
+    fxChain.forEach(plugin => {
+      if (!fxNodesMapRef.current[plugin.id]) {
+        let node: AudioNode | any = null
+        if (plugin.type === 'delay') {
+          node = ctx.createDelay(5.0)
+          node.delayTime.value = plugin.amount * 1.5
+        } else if (plugin.type === 'pan') {
+          node = ctx.createStereoPanner()
+          node.pan.value = plugin.amount
+        } else if (plugin.type === 'reverb') {
+          node = ctx.createConvolver()
+          const rate = ctx.sampleRate
+          const len = rate * 2.0
+          const impulse = ctx.createBuffer(2, len, rate)
+          for (let i = 0; i < 2; i++) {
+            const channel = impulse.getChannelData(i)
+            for (let j = 0; j < len; j++) {
+              channel[j] = (Math.random() * 2 - 1) * Math.pow(1 - j / len, 2.0)
+            }
+          }
+          node.buffer = impulse
+        } else if (plugin.type === 'vst') {
+          node = ctx.createGain() // Placeholder for VST
+          node.gain.value = plugin.amount
+        } else if (plugin.type === 'delay3') {
+          node = ctx.createDelay(5.0)
+          node.delayTime.value = plugin.amount * 2.0
+        } else if (plugin.type === 'eq2') {
+          // 7-Band Parametric EQ
+          const bands = plugin.bands || [
+            { freq: 60, gain: 0, type: 'lowshelf', Q: 1 },
+            { freq: 250, gain: 0, type: 'peaking', Q: 1.5 },
+            { freq: 500, gain: 0, type: 'peaking', Q: 1.5 },
+            { freq: 1000, gain: 0, type: 'peaking', Q: 1.5 },
+            { freq: 2000, gain: 0, type: 'peaking', Q: 1.5 },
+            { freq: 4000, gain: 0, type: 'peaking', Q: 1.5 },
+            { freq: 8000, gain: 0, type: 'highshelf', Q: 1 }
+          ]
+          
+          const nodes: BiquadFilterNode[] = []
+          for (let i = 0; i < 7; i++) {
+            const filter = ctx.createBiquadFilter()
+            filter.type = bands[i].type as BiquadFilterType
+            filter.frequency.value = bands[i].freq
+            filter.gain.value = bands[i].gain
+            filter.Q.value = bands[i].Q
+            nodes.push(filter)
+            if (i > 0) nodes[i - 1].connect(filter)
+          }
+          
+          node = nodes[0]
+          fxNodesMapRef.current[plugin.id] = { node, outNode: nodes[6], internalNodes: nodes, type: plugin.type }
+
+        } else if (plugin.type === 'maximus') {
+          node = ctx.createDynamicsCompressor()
+          node.threshold.value = -50
+          node.ratio.value = 4
+        } else if (plugin.type === 'vocodex') {
+          node = ctx.createBiquadFilter()
+          node.type = 'bandpass'
+          node.frequency.value = 1500
+          node.Q.value = 5
+        } else if (plugin.type === 'grossbeat' || plugin.type === 'edison' || plugin.type === 'patcher') {
+          node = ctx.createGain() // Editor/Router mockups
+        }
+        if (node && !fxNodesMapRef.current[plugin.id]) {
+          fxNodesMapRef.current[plugin.id] = { node, type: plugin.type }
+        }
+      } else {
+        // Update existing node
+        const mapEntry = fxNodesMapRef.current[plugin.id]
+        const n = mapEntry.node as any
+        if (plugin.type === 'delay') n.delayTime.value = plugin.amount * 1.5
+        if (plugin.type === 'pan') n.pan.value = plugin.amount
+        if (plugin.type === 'vst') n.gain.value = plugin.amount
+        if (plugin.type === 'delay3') n.delayTime.value = plugin.amount * 2.0
+        if (plugin.type === 'eq2' && mapEntry.internalNodes) {
+          const bands = plugin.bands
+          if (bands) {
+            for (let i = 0; i < 7; i++) {
+              if (bands[i] && mapEntry.internalNodes[i]) {
+                const filter = mapEntry.internalNodes[i] as BiquadFilterNode
+                filter.frequency.value = bands[i].freq
+                filter.gain.value = bands[i].gain
+                filter.Q.value = bands[i].Q
+              }
+            }
+          }
+        }
+      }
+    })
+
+    // Clean up removed nodes
+    Object.keys(fxNodesMapRef.current).forEach(id => {
+      if (!fxChain.find(p => p.id === id)) {
+        delete fxNodesMapRef.current[id]
+      }
+    })
+
+    // Update track routing
+    Object.values(trackNodesRef.current).forEach(nodes => {
+      try { nodes.analyserNode.disconnect() } catch (e) { }
+    })
+
+  }, [fxChain])
 
   useEffect(() => {
-    if (panNodeRef.current) {
-      panNodeRef.current.pan.value = panAmt
+    if (masterGainNodeRef.current) {
+      masterGainNodeRef.current.gain.value = masterVolume
     }
-  }, [panAmt])
+  }, [masterVolume])
+
+  const ensureTrackNodes = (ctx: AudioContext, track: Track) => {
+    if (!trackNodesRef.current[track.id]) {
+      const gainNode = ctx.createGain()
+      gainNode.gain.value = track.volume !== undefined ? track.volume : 1.0
+
+      const analyserNode = ctx.createAnalyser()
+      analyserNode.fftSize = 256
+
+      let pannerNode: StereoPannerNode | undefined
+      if (ctx.createStereoPanner) {
+        pannerNode = ctx.createStereoPanner()
+        pannerNode.pan.value = track.pan !== undefined ? track.pan : 0.0
+        gainNode.connect(pannerNode)
+        pannerNode.connect(analyserNode)
+      } else {
+        gainNode.connect(analyserNode)
+      }
+
+      trackNodesRef.current[track.id] = { gainNode, pannerNode, analyserNode }
+    }
+
+    const nodes = trackNodesRef.current[track.id]
+
+    // Always disconnect first to avoid duplicate connections
+    try { nodes.analyserNode.disconnect() } catch (e) { }
+
+    if (!track.fxEnabled) {
+      if (masterGainNodeRef.current) {
+        nodes.analyserNode.connect(masterGainNodeRef.current)
+      } else {
+        nodes.analyserNode.connect(ctx.destination)
+      }
+    } else {
+      // Connect through active fxChain
+      const activePlugins = fxChainRef.current.filter(p => p.enabled)
+      if (activePlugins.length === 0) {
+        if (masterGainNodeRef.current) nodes.analyserNode.connect(masterGainNodeRef.current)
+        else nodes.analyserNode.connect(ctx.destination)
+      } else {
+        let lastNode: AudioNode = nodes.analyserNode
+        for (let i = 0; i < activePlugins.length; i++) {
+          const mapEntry = fxNodesMapRef.current[activePlugins[i].id]
+          const pluginNode = mapEntry?.node
+          const pluginOutNode = mapEntry?.outNode || pluginNode
+          
+          if (pluginNode && pluginOutNode) {
+            try { lastNode.connect(pluginNode) } catch (e) { }
+            // Disconnect pluginOutNode's previous outputs
+            try { pluginOutNode.disconnect() } catch (e) { }
+            lastNode = pluginOutNode
+          }
+        }
+        if (masterGainNodeRef.current) {
+          try { lastNode.connect(masterGainNodeRef.current) } catch (e) { }
+        } else {
+          try { lastNode.connect(ctx.destination) } catch (e) { }
+        }
+      }
+    }
+
+    return nodes
+  }
 
   const routeAudioNode = (srcNode: AudioNode, trackId: string) => {
     const ctx = audioCtxRef.current
     if (!ctx) return
-    const track = tracks.find(t => t.id === trackId)
+    const track = tracksRef.current.find(t => t.id === trackId)
 
-    srcNode.connect(ctx.destination)
-
-    if (track && track.fxEnabled) {
-      if (delayEnabled && delayNodeRef.current) {
-        srcNode.connect(delayNodeRef.current)
-      }
-      if (panEnabled && panNodeRef.current) {
-        srcNode.connect(panNodeRef.current)
-      }
-      if (reverbEnabled && reverbNodeRef.current) {
-        srcNode.connect(reverbNodeRef.current)
+    if (track) {
+      const trackNodes = ensureTrackNodes(ctx, track)
+      srcNode.connect(trackNodes.gainNode)
+    } else {
+      if (masterGainNodeRef.current) {
+        srcNode.connect(masterGainNodeRef.current)
+      } else {
+        srcNode.connect(ctx.destination)
       }
     }
+  }
+
+  const playAuraSynthTone = (ctx: AudioContext, freq: number, duration: number, track: Track, startTime = ctx.currentTime) => {
+    // Generate deterministic random values based on preset
+    const preset = track.auraPreset || 1
+    const rand = (i: number) => {
+      let x = Math.sin(preset + i) * 10000;
+      return x - Math.floor(x);
+    }
+
+    const gainNode = ctx.createGain()
+    routeAudioNode(gainNode, track.id)
+
+    // Algorithmic sound design using preset seed
+    const numOscs = Math.floor(rand(1) * 3) + 2; // 2 to 4 oscillators
+    const oscs: OscillatorNode[] = []
+
+    for (let i = 0; i < numOscs; i++) {
+      const osc = ctx.createOscillator()
+      const oscGain = ctx.createGain()
+
+      const typeRand = rand(2 + i)
+      osc.type = typeRand > 0.75 ? 'sawtooth' : typeRand > 0.5 ? 'square' : typeRand > 0.25 ? 'triangle' : 'sine'
+
+      // Detune algorithmic
+      osc.detune.value = (rand(3 + i) - 0.5) * 50
+
+      // Frequency algorithmic
+      const octOffset = Math.floor(rand(4 + i) * 3) - 1 // -1, 0, 1 octave
+      osc.frequency.setValueAtTime(freq * Math.pow(2, octOffset), startTime)
+
+      oscGain.gain.value = (1 / numOscs) * (rand(5 + i) * 0.5 + 0.5)
+
+      osc.connect(oscGain)
+      oscGain.connect(gainNode)
+      oscs.push(osc)
+    }
+
+    // Filter
+    const filter = ctx.createBiquadFilter()
+    filter.type = rand(6) > 0.5 ? 'lowpass' : 'bandpass'
+    filter.frequency.setValueAtTime(freq * (rand(7) * 4 + 1), startTime)
+
+    // Envelope
+    const attack = rand(8) * 0.1
+    const decay = rand(9) * 0.3
+    const sustain = rand(10) * 0.5 + 0.2
+
+    gainNode.gain.setValueAtTime(0, startTime)
+    gainNode.gain.linearRampToValueAtTime((track.auraLevel || 0.8) * 0.3, startTime + attack)
+    gainNode.gain.exponentialRampToValueAtTime((track.auraLevel || 0.8) * 0.3 * sustain, startTime + attack + decay)
+    gainNode.gain.exponentialRampToValueAtTime(0.0001, startTime + duration)
+
+    oscs.forEach(osc => {
+      osc.start(startTime)
+      osc.stop(startTime + duration)
+    })
+  }
+
+  const playFluxTone = (ctx: AudioContext, freq: number, duration: number, trackId: string, startTime = ctx.currentTime) => {
+    const gainNode = ctx.createGain()
+    routeAudioNode(gainNode, trackId)
+
+    // Subtractive synthesis: 3 detuned sawtooths
+    const oscs: OscillatorNode[] = []
+    const detunes = [-12, 0, 12]
+    detunes.forEach(detune => {
+      const osc = ctx.createOscillator()
+      osc.type = 'sawtooth'
+      osc.frequency.setValueAtTime(freq, startTime)
+      osc.detune.setValueAtTime(detune, startTime)
+      const oscGain = ctx.createGain()
+      oscGain.gain.value = 0.3
+      osc.connect(oscGain)
+      oscGain.connect(gainNode)
+      oscs.push(osc)
+    })
+
+    // Lowpass filter
+    const filter = ctx.createBiquadFilter()
+    filter.type = 'lowpass'
+    filter.frequency.setValueAtTime(freq * 3, startTime)
+    filter.Q.value = 3
+    filter.connect(gainNode)
+
+    oscs.forEach(osc => osc.disconnect())
+    oscs.forEach(osc => osc.connect(filter))
+
+    // ADSR Envelope
+    gainNode.gain.setValueAtTime(0, startTime)
+    gainNode.gain.linearRampToValueAtTime(0.4, startTime + 0.05)
+    gainNode.gain.exponentialRampToValueAtTime(0.2, startTime + 0.3)
+    gainNode.gain.exponentialRampToValueAtTime(0.0001, startTime + duration)
+
+    oscs.forEach(osc => {
+      osc.start(startTime)
+      osc.stop(startTime + duration)
+    })
+  }
+
+  const playCygnusTone = (ctx: AudioContext, freq: number, duration: number, trackId: string, startTime = ctx.currentTime) => {
+    const gainNode = ctx.createGain()
+    routeAudioNode(gainNode, trackId)
+
+    // 3-Operator FM Synthesis
+    const carrier = ctx.createOscillator()
+    carrier.type = 'sine'
+    carrier.frequency.setValueAtTime(freq, startTime)
+
+    const mod1 = ctx.createOscillator()
+    mod1.type = 'sine'
+    mod1.frequency.setValueAtTime(freq * 2, startTime) // Ratio 2:1
+    const mod1Gain = ctx.createGain()
+    mod1Gain.gain.setValueAtTime(freq * 3, startTime) // Modulation index
+    mod1.connect(mod1Gain)
+
+    const mod2 = ctx.createOscillator()
+    mod2.type = 'sine'
+    mod2.frequency.setValueAtTime(freq * 0.5, startTime) // Sub ratio
+    const mod2Gain = ctx.createGain()
+    mod2Gain.gain.setValueAtTime(freq * 1.5, startTime)
+    mod2.connect(mod2Gain)
+
+    // FM Routing: mod2 -> mod1 -> carrier
+    mod2Gain.connect(mod1.frequency)
+    mod1Gain.connect(carrier.frequency)
+    
+    carrier.connect(gainNode)
+
+    gainNode.gain.setValueAtTime(0, startTime)
+    gainNode.gain.linearRampToValueAtTime(0.3, startTime + 0.1)
+    gainNode.gain.exponentialRampToValueAtTime(0.0001, startTime + duration)
+
+    mod2.start(startTime)
+    mod2.stop(startTime + duration)
+    mod1.start(startTime)
+    mod1.stop(startTime + duration)
+    carrier.start(startTime)
+    carrier.stop(startTime + duration)
   }
 
   const playTone = (freq: number, type: string, duration: number, isAutoScheduled = false, trackId = activeTrackId) => {
@@ -441,10 +778,10 @@ export default function App() {
     if (isPlayingRef.current || isRecordingRef.current) {
       const elapsed = performance.now() - startTimeRef.current
       playbackTimeRef.current = elapsed / 1000
-      
+
       const timeTextEl = document.getElementById('time-text')
       if (timeTextEl) timeTextEl.textContent = formatTime(elapsed)
-      
+
       const playheadEl = document.getElementById('playhead')
       const currentX = (elapsed / 1000) * ((bpmRef.current / 60) * widthPerBeatRef.current)
       if (playheadEl) playheadEl.style.left = `${10 + currentX}px`
@@ -462,7 +799,7 @@ export default function App() {
             canvasEl.width = canvasEl.clientWidth
             canvasEl.height = canvasEl.clientHeight
           }
-          
+
           const ctx = canvasEl.getContext('2d')
           if (ctx) {
             const drawX = progressPercentRec * canvasEl.width
@@ -490,11 +827,11 @@ export default function App() {
       if (isMetronomeOnRef.current) {
         const beatDuration = 60 / bpmRef.current
         const currentSeconds = elapsed / 1000
-        
+
         if (nextMetronomeBeatIdxRef.current * beatDuration < currentSeconds - beatDuration) {
           nextMetronomeBeatIdxRef.current = Math.floor(currentSeconds / beatDuration)
         }
-        
+
         const currentBeatTime = nextMetronomeBeatIdxRef.current * beatDuration
         if (currentBeatTime <= currentSeconds) {
           playMetronomeClick(nextMetronomeBeatIdxRef.current)
@@ -512,9 +849,18 @@ export default function App() {
             const track = tracksRef.current.find(t => t.id === tId)
             const isAnySoloed = tracksRef.current.some(t => t.soloed)
             const shouldMute = track?.muted || (isAnySoloed && !track?.soloed)
-            
+
             if (!shouldMute) {
-              if (ev.type === 'tone') {
+              if (ev.type === 'tone' && track?.type === 'autogun') {
+                initAudioCtx()
+                if (audioCtxRef.current && track) playAuraSynthTone(audioCtxRef.current, ev.data.freq, ev.data.duration, track)
+              } else if (ev.type === 'tone' && track?.type === 'flux') {
+                initAudioCtx()
+                if (audioCtxRef.current && track) playFluxTone(audioCtxRef.current, ev.data.freq, ev.data.duration, tId)
+              } else if (ev.type === 'tone' && track?.type === 'cygnus') {
+                initAudioCtx()
+                if (audioCtxRef.current && track) playCygnusTone(audioCtxRef.current, ev.data.freq, ev.data.duration, tId)
+              } else if (ev.type === 'tone') {
                 playTone(ev.data.freq, synthInstrument, ev.data.duration, true, tId)
               } else if (ev.type === 'drum') {
                 playDrum(ev.data.type, true, tId)
@@ -536,10 +882,10 @@ export default function App() {
     if (playheadEl) playheadEl.style.left = `${10 + currentX}px`
     const timeTextEl = document.getElementById('time-text')
     if (timeTextEl) timeTextEl.textContent = formatTime(time * 1000)
-    
+
     if (isPlaying || isRecording) {
       startTimeRef.current = performance.now() - time * 1000
-      
+
       let idx = 0
       const events = midiEventsRef.current
       while (idx < events.length && events[idx].time < time) {
@@ -569,7 +915,7 @@ export default function App() {
       isPlayingRef.current = true
       isRecordingRef.current = false
       startTimeRef.current = performance.now() - playbackTimeRef.current * 1000
-      
+
       const startSecs = playbackTimeRef.current
       let idx = 0
       const events = midiEventsRef.current
@@ -580,7 +926,7 @@ export default function App() {
 
       const beatDuration = 60 / bpmRef.current
       nextMetronomeBeatIdxRef.current = Math.floor(startSecs / beatDuration)
-      
+
       tracks.forEach(track => {
         if (track.type === 'audio' || track.type === 'vocaloid') {
           const audioEl = document.getElementById(`vocal-playback-${track.id}`) as HTMLAudioElement
@@ -591,6 +937,28 @@ export default function App() {
         }
       })
 
+      const scheduleAutomations = (ctx: AudioContext, startSecs: number) => {
+        tracksRef.current.forEach(track => {
+          if (track.volumeAutomation && track.volumeAutomation.length > 0) {
+            const nodes = ensureTrackNodes(ctx, track)
+            const gainParam = nodes.gainNode.gain
+
+            gainParam.cancelScheduledValues(ctx.currentTime)
+            gainParam.setValueAtTime(gainParam.value, ctx.currentTime)
+
+            track.volumeAutomation.forEach((pt) => {
+              const ptSeconds = pt.time * (60 / bpmRef.current)
+              if (ptSeconds >= startSecs) {
+                const timeToEvent = ptSeconds - startSecs
+                gainParam.linearRampToValueAtTime(pt.value, ctx.currentTime + timeToEvent)
+              }
+            })
+          }
+        })
+      }
+
+      scheduleAutomations(audioCtxRef.current!, startSecs)
+
       setTimeout(() => {
         updatePlayhead()
       }, 50)
@@ -598,7 +966,17 @@ export default function App() {
       setIsPlaying(false)
       isPlayingRef.current = false
       if (animationIdRef.current) cancelAnimationFrame(animationIdRef.current)
-      
+
+      if (audioCtxRef.current) {
+        tracksRef.current.forEach(track => {
+          if (track.volumeAutomation && track.volumeAutomation.length > 0) {
+            const nodes = ensureTrackNodes(audioCtxRef.current!, track)
+            nodes.gainNode.gain.cancelScheduledValues(audioCtxRef.current!.currentTime)
+            nodes.gainNode.gain.setValueAtTime(track.volume !== undefined ? track.volume : 1.0, audioCtxRef.current!.currentTime)
+          }
+        })
+      }
+
       tracks.forEach(track => {
         if (track.type === 'audio' || track.type === 'vocaloid') {
           const audioEl = document.getElementById(`vocal-playback-${track.id}`) as HTMLAudioElement
@@ -618,7 +996,7 @@ export default function App() {
       startTimeRef.current = performance.now()
       playbackTimeRef.current = 0
       nextMetronomeBeatIdxRef.current = 0
-      
+
       const canvases = document.querySelectorAll(`.waveform-canvas`)
       canvases.forEach(node => {
         const canvasEl = node as HTMLCanvasElement
@@ -663,7 +1041,15 @@ export default function App() {
 
   const handleAddTrackWithType = (type: string) => {
     const nextId = (tracks.length + 1).toString()
-    const name = type === 'vocaloid' ? `🎤 Vocaloid Singer ${nextId}` : type === 'audio' ? `Vocal Rec ${nextId}` : type === 'tone' ? `Synth ${nextId}` : `Drums ${nextId}`
+    let name = `Track ${nextId}`
+    if (type === 'vocaloid') name = `  Vocaloid Singer ${nextId}`
+    else if (type === 'audio') name = `Vocal Rec ${nextId}`
+    else if (type === 'tone') name = `Synth ${nextId}`
+    else if (type === 'drum') name = `Drums ${nextId}`
+    else if (type === 'autogun') name = `AuraSynth ${nextId}`
+    else if (type === 'flex') name = `Flex Synth ${nextId}`
+    else if (type === 'sytrus') name = `Sytrus FM ${nextId}`
+
     const newTrack: Track = {
       id: nextId,
       name: name,
@@ -671,7 +1057,8 @@ export default function App() {
       muted: false,
       soloed: false,
       fxEnabled: true,
-      color: `hsl(${Math.floor(Math.random() * 360)}, 70%, 60%)`
+      color: `hsl(${Math.floor(Math.random() * 360)}, 70%, 60%)`,
+      ...(type === 'autogun' ? { auraPreset: Math.floor(Math.random() * 4294967295) + 1, auraLevel: 0.8, auraMagic: false } : {})
     }
     setTracks([...tracks, newTrack])
     setActiveTrackId(nextId)
@@ -700,6 +1087,20 @@ export default function App() {
     setTracks(tracks.map(t => t.id === trackId ? { ...t, name: newName } : t))
   }
 
+  const handleVolumeChange = (trackId: string, volume: number) => {
+    setTracks(tracks.map(t => t.id === trackId ? { ...t, volume } : t))
+    if (trackNodesRef.current[trackId]) {
+      trackNodesRef.current[trackId].gainNode.gain.value = volume
+    }
+  }
+
+  const handlePanChange = (trackId: string, pan: number) => {
+    setTracks(tracks.map(t => t.id === trackId ? { ...t, pan } : t))
+    if (trackNodesRef.current[trackId] && trackNodesRef.current[trackId].pannerNode) {
+      trackNodesRef.current[trackId].pannerNode!.pan.value = pan
+    }
+  }
+
   const handleDeleteTrack = (trackId: string) => {
     setTracks(tracks.filter(t => t.id !== trackId))
     setMidiEvents(prev => prev.filter(ev => ev.trackId !== trackId))
@@ -717,6 +1118,10 @@ export default function App() {
   const handleAddMidiEvent = (ev: MidiEvent) => {
     pushUndo()
     setMidiEvents(prev => [...prev, ev].sort((a, b) => a.time - b.time))
+  }
+
+  const handleUpdateAutomation = (trackId: string, automation: AutomationPoint[]) => {
+    setTracks(tracks.map(t => t.id === trackId ? { ...t, volumeAutomation: automation } : t))
   }
 
   const handleUpdateMidiEvent = (noteId: string, updatedData: any) => {
@@ -773,7 +1178,7 @@ export default function App() {
     else if (timeSig === '1/4') snapUnit = 0.25
     else if (timeSig === '1/8') snapUnit = 0.125
     else if (timeSig === 'Off') snapUnit = 0.001
-    
+
     const snapPx = beatPx * snapUnit
     const snappedDropX = Math.round(dropX / snapPx) * snapPx
     const snappedTime = Math.max(0, (snappedDropX / widthPerBeat) / (bpm / 60))
@@ -813,7 +1218,19 @@ export default function App() {
 
   const handlePlayPianoKey = (noteName: string, oct: number, semis: number) => {
     const freq = 440 * Math.pow(2, ((semis + (oct - 4) * 12)) / 12)
-    playTone(freq, synthInstrument, 0.5)
+    const track = tracks.find(t => t.id === activeTrackId)
+    if (track && track.type === 'autogun') {
+      initAudioCtx()
+      if (audioCtxRef.current) playAuraSynthTone(audioCtxRef.current, freq, 0.5, track)
+    } else if (track && track.type === 'flux') {
+      initAudioCtx()
+      if (audioCtxRef.current) playFluxTone(audioCtxRef.current, freq, 0.5, track.id)
+    } else if (track && track.type === 'cygnus') {
+      initAudioCtx()
+      if (audioCtxRef.current) playCygnusTone(audioCtxRef.current, freq, 0.5, track.id)
+    } else {
+      playTone(freq, synthInstrument, 0.5)
+    }
 
     if (isRecording) {
       const elapsed = performance.now() - startTimeRef.current
@@ -888,7 +1305,22 @@ export default function App() {
     }
 
     const freqs = chordFreqs[chord] || [261.63, 329.63, 392.00]
-    freqs.forEach(freq => playTone(freq, synthInstrument, 0.8))
+    const track = tracks.find(t => t.id === activeTrackId)
+
+    freqs.forEach(freq => {
+      if (track && track.type === 'autogun') {
+        initAudioCtx()
+        if (audioCtxRef.current) playAuraSynthTone(audioCtxRef.current, freq, 0.8, track)
+      } else if (track && track.type === 'flux') {
+        initAudioCtx()
+        if (audioCtxRef.current) playFluxTone(audioCtxRef.current, freq, 0.8, track.id)
+      } else if (track && track.type === 'cygnus') {
+        initAudioCtx()
+        if (audioCtxRef.current) playCygnusTone(audioCtxRef.current, freq, 0.8, track.id)
+      } else {
+        playTone(freq, synthInstrument, 0.8)
+      }
+    })
 
     if (isRecording) {
       const elapsed = performance.now() - startTimeRef.current
@@ -923,7 +1355,7 @@ export default function App() {
       const ctx = audioCtxRef.current
       if (ctx) {
         const source = ctx.createMediaStreamSource(stream)
-        
+
         const analyser = ctx.createAnalyser()
         analyser.fftSize = 256
         source.connect(analyser)
@@ -1002,7 +1434,7 @@ export default function App() {
       const url = URL.createObjectURL(file)
       const nextId = (tracks.length + 1).toString()
       const newTrackName = file.name ? file.name.replace(/\.[^/.]+$/, "") : `Audio Track ${nextId}`
-      
+
       const newTrack: Track = {
         id: nextId,
         name: newTrackName,
@@ -1012,7 +1444,7 @@ export default function App() {
         fxEnabled: true,
         color: `hsl(${Math.floor(Math.random() * 360)}, 70%, 60%)`
       }
-      
+
       setTracks(prev => [...prev, newTrack])
       setTrackAudioUrls(prev => ({ ...prev, [nextId]: url }))
       setActiveTrackId(nextId)
@@ -1094,7 +1526,7 @@ export default function App() {
     const offlineDelay = offlineCtx.createDelay(5.0)
     const offlinePan = offlineCtx.createStereoPanner()
     const offlineReverb = offlineCtx.createConvolver()
-    
+
     if (reverbNodeRef.current && reverbNodeRef.current.buffer) {
       offlineReverb.buffer = reverbNodeRef.current.buffer
     }
@@ -1203,7 +1635,7 @@ export default function App() {
             const res = await fetch(url)
             const arrayBuf = await res.arrayBuffer()
             const audioBuf = await ctx.decodeAudioData(arrayBuf)
-            
+
             const sourceNode = offlineCtx.createBufferSource()
             sourceNode.buffer = audioBuf
             routeOfflineAudioNode(sourceNode, track.id)
@@ -1253,7 +1685,7 @@ export default function App() {
       a.href = url
       a.download = `${projectTitle.toLowerCase().replace(/\s+/g, '_')}_session.mmpz`
       a.click()
-    } catch(e) {
+    } catch (e) {
       const url = URL.createObjectURL(new Blob([xml], { type: 'text/xml' }))
       const a = document.createElement('a')
       a.href = url
@@ -1292,7 +1724,7 @@ export default function App() {
 
     const doc = new DOMParser().parseFromString(xmlText, 'text/xml')
     const trackNodes = doc.querySelectorAll('trackcontainer > track')
-    
+
     const newTracks: Track[] = []
     const newMidiEvents: MidiEvent[] = []
 
@@ -1380,7 +1812,7 @@ export default function App() {
             setActiveTrackId(newTracks[0].id)
             setActiveTrackType(newTracks[0].type)
           }
-        } catch(e) { console.error(e) }
+        } catch (e) { console.error(e) }
       }
     }
   }
@@ -1405,11 +1837,11 @@ export default function App() {
     playbackTimeRef.current = 0
     nextEventIdxRef.current = 0
     nextMetronomeBeatIdxRef.current = 0
-    
+
     if (isPlaying || isRecording) {
       startTimeRef.current = performance.now()
     }
-    
+
     const playheadEl = document.getElementById('playhead')
     if (playheadEl) playheadEl.style.left = '10px'
     const timeTextEl = document.getElementById('time-text')
@@ -1419,12 +1851,12 @@ export default function App() {
   const handleSkipNext = () => {
     let maxT = 0
     midiEvents.forEach(ev => { if (ev.time > maxT) maxT = ev.time })
-    
+
     playbackTimeRef.current = maxT
     if (isPlaying || isRecording) {
       startTimeRef.current = performance.now() - maxT * 1000
     }
-    
+
     const currentX = maxT * (bpm / 60) * widthPerBeatRef.current
     const playheadEl = document.getElementById('playhead')
     if (playheadEl) playheadEl.style.left = `${10 + currentX}px`
@@ -1437,7 +1869,7 @@ export default function App() {
       const target = e.target as HTMLElement
       if ((window as any).__isPromptOpen) return
       if (target.tagName === 'INPUT' || target.getAttribute('contenteditable') === 'true') return
-      
+
       const keyMap3: Record<string, number> = {
         'z': 0, 's': 1, 'x': 2, 'd': 3, 'c': 4, 'v': 5, 'g': 6, 'b': 7, 'h': 8, 'n': 9, 'j': 10, 'm': 11
       }
@@ -1479,7 +1911,7 @@ export default function App() {
   return (
     <div className="daw-container">
       <TitleBar />
-      <TopBar 
+      <TopBar
         projectTitle={projectTitle}
         setProjectTitle={setProjectTitle}
         isPlaying={isPlaying}
@@ -1506,10 +1938,12 @@ export default function App() {
         onOpenPreviousProject={handleOpenPreviousProject}
         onNewProject={handleNewProject}
         onLoadCss={handleLoadCss}
+        showAutomation={showAutomation}
+        onAutomationToggle={() => setShowAutomation(!showAutomation)}
       />
 
       <main className="main-content">
-        <TrackList 
+        <TrackList
           tracks={tracks}
           activeTrackId={activeTrackId}
           onSelectTrack={handleSelectTrack}
@@ -1521,8 +1955,10 @@ export default function App() {
           onAddTrack={() => setActiveModal('addTrack')}
           onShowFxPanel={() => setActiveTab('fx')}
           trackHeight={trackHeight}
+          onVolumeChange={handleVolumeChange}
+          onPanChange={handlePanChange}
         />
-        <Timeline 
+        <Timeline
           tracks={tracks}
           activeTrackId={activeTrackId}
           onSelectTrack={handleSelectTrack}
@@ -1537,18 +1973,22 @@ export default function App() {
           trackHeight={trackHeight}
           setTrackHeight={setTrackHeight}
           onUpdateMidiEvent={handleUpdateMidiEvent}
+          onUpdateAutomation={handleUpdateAutomation}
+          showAutomation={showAutomation}
         />
       </main>
 
-      <BottomPanel 
+      <BottomPanel
         activeTab={activeTab}
         setActiveTab={setActiveTab}
         panelHeight={panelHeight}
         onResizeStart={handleResizeStart}
-        panelTitle={activeTab === 'instrument' ? 'Track Instrument Settings' : activeTab === 'fx' ? 'FX Routing Effects Chain' : 'MIDI Step Sequencer Roll'}
+        panelTitle={activeTab === 'instrument' ? 'Track Instrument Settings' : activeTab === 'fx' ? 'FX Routing Effects Chain' : activeTab === 'mixer' ? 'Mixer Console' : 'MIDI Step Sequencer Roll'}
       >
         {activeTab === 'instrument' && (
-          <InstrumentPanel 
+          <InstrumentPanel
+            tracks={tracks}
+            setTracks={setTracks}
             trackType={activeTrackType}
             synthInstrument={synthInstrument}
             setSynthInstrument={setSynthInstrument}
@@ -1575,23 +2015,15 @@ export default function App() {
           />
         )}
         {activeTab === 'fx' && (
-          <FxPanel 
-            delayAmt={delayAmt}
-            setDelayAmt={setDelayAmt}
-            panAmt={panAmt}
-            setPanAmt={setPanAmt}
-            reverbAmt={reverbAmt}
-            setReverbAmt={setReverbAmt}
-            delayEnabled={delayEnabled}
-            setDelayEnabled={setDelayEnabled}
-            panEnabled={panEnabled}
-            setPanEnabled={setPanEnabled}
-            reverbEnabled={reverbEnabled}
-            setReverbEnabled={setReverbEnabled}
+          <FxPanel
+            fxChain={fxChain}
+            setFxChain={setFxChain}
+            analyserRef={analyserRef}
+            dataArrayRef={dataArrayRef}
           />
         )}
         {activeTab === 'midi' && (
-          <MidiEditor 
+          <MidiEditor
             tracks={tracks}
             activeTrackId={activeTrackId}
             midiEvents={midiEvents}
@@ -1604,11 +2036,24 @@ export default function App() {
             trackAudioUrls={trackAudioUrls}
           />
         )}
+        {activeTab === 'mixer' && (
+          <MixerPanel
+            tracks={tracks}
+            trackNodesRef={trackNodesRef}
+            masterAnalyserRef={masterAnalyserRef}
+            onVolumeChange={handleVolumeChange}
+            onPanChange={handlePanChange}
+            onToggleMute={handleToggleMute}
+            onToggleSolo={handleToggleSolo}
+            masterVolume={masterVolume}
+            setMasterVolume={setMasterVolume}
+          />
+        )}
       </BottomPanel>
 
-      <Modal 
-        isOpen={activeModal === 'addTrack'} 
-        title="Add New Track" 
+      <Modal
+        isOpen={activeModal === 'addTrack'}
+        title="Add New Track"
         onClose={() => setActiveModal(null)}
       >
         <div className="modal-item" onClick={() => handleAddTrackWithType('vocaloid')}>
@@ -1617,6 +2062,27 @@ export default function App() {
             <span className="modal-item-desc">Synthesize virtual Japanese/English singers with full text-to-speech lyrics & MIDI</span>
           </div>
           <i className="bx bx-music modal-item-action" />
+        </div>
+        <div className="modal-item" onClick={() => handleAddTrackWithType('autogun')}>
+          <div className="modal-item-info">
+            <span className="modal-item-title">AuraSynth (Algorithmic)</span>
+            <span className="modal-item-desc">Explore over 4 billion algorithmic sound presets</span>
+          </div>
+          <i className="bx bx-slider-alt modal-item-action" />
+        </div>
+        <div className="modal-item" onClick={() => handleAddTrackWithType('flex')}>
+          <div className="modal-item-info">
+            <span className="modal-item-title">Flex (Sample Workstation)</span>
+            <span className="modal-item-desc">Modern subtractive synthesis powered by high-quality samples</span>
+          </div>
+          <i className="bx bx-layer modal-item-action" />
+        </div>
+        <div className="modal-item" onClick={() => handleAddTrackWithType('sytrus')}>
+          <div className="modal-item-info">
+            <span className="modal-item-title">Sytrus (FM Synthesizer)</span>
+            <span className="modal-item-desc">Complex 6-operator hybrid FM and subtractive synthesis</span>
+          </div>
+          <i className="bx bx-network-chart modal-item-action" />
         </div>
         <div className="modal-item" onClick={() => handleAddTrackWithType('audio')}>
           <div className="modal-item-info">
@@ -1648,9 +2114,9 @@ export default function App() {
         </div>
       </Modal>
 
-      <Modal 
-        isOpen={activeModal === 'edit'} 
-        title="Edit Tools" 
+      <Modal
+        isOpen={activeModal === 'edit'}
+        title="Edit Tools"
         onClose={() => setActiveModal(null)}
       >
         <div className="modal-item" onClick={() => { setActiveModal(null); pushUndo(); setMidiEvents([]); }}>
@@ -1676,9 +2142,9 @@ export default function App() {
         </div>
       </Modal>
 
-      <Modal 
-        isOpen={activeModal === 'view'} 
-        title="View Configuration" 
+      <Modal
+        isOpen={activeModal === 'view'}
+        title="View Configuration"
         onClose={() => setActiveModal(null)}
       >
         <div className="modal-item" onClick={() => { setActiveModal(null); const grid = document.getElementById('pr-grid'); if (grid) grid.classList.toggle('high-contrast-grid'); }}>
@@ -1697,9 +2163,9 @@ export default function App() {
         </div>
       </Modal>
 
-      <Modal 
-        isOpen={activeModal === 'settings'} 
-        title="Project Settings" 
+      <Modal
+        isOpen={activeModal === 'settings'}
+        title="Project Settings"
         onClose={() => setActiveModal(null)}
       >
         <div className="modal-item" style={{ cursor: 'default' }}>
@@ -1725,9 +2191,9 @@ export default function App() {
         </div>
       </Modal>
 
-      <Modal 
-        isOpen={activeModal === 'help'} 
-        title="Mini-DAW User Manual" 
+      <Modal
+        isOpen={activeModal === 'help'}
+        title="Mini-DAW User Manual"
         onClose={() => setActiveModal(null)}
       >
         <div className="manual-section" style={{ fontSize: '13px', lineHeight: 1.6, color: '#ddd', display: 'flex', flexDirection: 'column', gap: '12px' }}>

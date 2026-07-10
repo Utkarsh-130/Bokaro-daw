@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 
 interface Track {
   id: string
@@ -8,6 +9,8 @@ interface Track {
   soloed: boolean
   fxEnabled: boolean
   color?: string
+  volume?: number
+  pan?: number
 }
 
 interface TrackListProps {
@@ -21,7 +24,10 @@ interface TrackListProps {
   onDeleteTrack: (id: string) => void
   onAddTrack: () => void
   onShowFxPanel: () => void
+  onAddFxPlugin?: (type: string) => void
   trackHeight: number
+  onVolumeChange: (id: string, volume: number) => void
+  onPanChange: (id: string, pan: number) => void
 }
 
 export default function TrackList({ 
@@ -35,7 +41,10 @@ export default function TrackList({
   onDeleteTrack,
   onAddTrack,
   onShowFxPanel,
-  trackHeight
+  onAddFxPlugin,
+  trackHeight,
+  onVolumeChange,
+  onPanChange
 }: TrackListProps) {
   return (
     <div className="track-list" id="track-list">
@@ -51,10 +60,13 @@ export default function TrackList({
           onToggleMute={() => onToggleMute(track.id)}
           onToggleSolo={() => onToggleSolo(track.id)}
           onToggleFx={() => onToggleFx(track.id)}
-          onRename={(newName) => onRenameTrack(track.id, newName)}
+          onRename={(name) => onRenameTrack(track.id, name)}
           onDelete={() => onDeleteTrack(track.id)}
           onShowFxPanel={onShowFxPanel}
+          onAddFxPlugin={onAddFxPlugin ? (type) => onAddFxPlugin(track.id, type) : undefined}
           trackHeight={trackHeight}
+          onVolumeChange={(v) => onVolumeChange(track.id, v)}
+          onPanChange={(p) => onPanChange(track.id, p)}
         />
       ))}
     </div>
@@ -71,7 +83,10 @@ interface TrackItemProps {
   onRename: (name: string) => void
   onDelete: () => void
   onShowFxPanel: () => void
+  onAddFxPlugin?: (type: string) => void
   trackHeight: number
+  onVolumeChange: (volume: number) => void
+  onPanChange: (pan: number) => void
 }
 
 function TrackItem({ 
@@ -84,10 +99,14 @@ function TrackItem({
   onRename,
   onDelete,
   onShowFxPanel,
-  trackHeight
+  onAddFxPlugin,
+  trackHeight,
+  onVolumeChange,
+  onPanChange
 }: TrackItemProps) {
   const [isEditing, setIsEditing] = useState(false)
   const [menuPos, setMenuPos] = useState<{x: number, y: number} | null>(null)
+  const [showStockSubmenu, setShowStockSubmenu] = useState(false)
 
   useEffect(() => {
     if (menuPos) {
@@ -203,7 +222,8 @@ function TrackItem({
         </span>
       </div>
 
-      {menuPos && (
+
+      {menuPos && createPortal(
         <div 
           style={{
             position: 'fixed',
@@ -213,7 +233,7 @@ function TrackItem({
             border: '1px solid #444',
             padding: '4px',
             borderRadius: '4px',
-            zIndex: 1000,
+            zIndex: 10000,
             display: 'flex',
             flexDirection: 'column',
             minWidth: '150px',
@@ -222,12 +242,53 @@ function TrackItem({
           onClick={(e) => e.stopPropagation()}
         >
           <div 
+            style={{ padding: '8px 12px', cursor: 'pointer', fontSize: '12px', color: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderRadius: '2px' }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = '#333'; setShowStockSubmenu(true); }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+          >
+            <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><i className="bx bx-slider-alt" /> Add Effects</span>
+            <i className="bx bx-chevron-right" />
+          </div>
+
+          {showStockSubmenu && (
+            <div 
+              style={{
+                position: 'absolute',
+                left: '100%',
+                top: '0',
+                background: '#222',
+                border: '1px solid #444',
+                padding: '4px',
+                borderRadius: '4px',
+                minWidth: '150px',
+                boxShadow: '0 4px 12px rgba(0,0,0,0.5)'
+              }}
+              onMouseEnter={() => setShowStockSubmenu(true)}
+              onMouseLeave={() => setShowStockSubmenu(false)}
+            >
+              <div style={{ padding: '8px 12px', cursor: 'pointer', fontSize: '12px', color: '#fff', borderRadius: '2px' }} onMouseEnter={(e) => e.currentTarget.style.background = '#333'} onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'} onClick={() => { onAddFxPlugin?.('delay'); setMenuPos(null); }}>Stereo Delay</div>
+              <div style={{ padding: '8px 12px', cursor: 'pointer', fontSize: '12px', color: '#fff', borderRadius: '2px' }} onMouseEnter={(e) => e.currentTarget.style.background = '#333'} onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'} onClick={() => { onAddFxPlugin?.('reverb'); setMenuPos(null); }}>Space Reverb</div>
+              <div style={{ padding: '8px 12px', cursor: 'pointer', fontSize: '12px', color: '#fff', borderRadius: '2px' }} onMouseEnter={(e) => e.currentTarget.style.background = '#333'} onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'} onClick={() => { onAddFxPlugin?.('pan'); setMenuPos(null); }}>Auto Panner</div>
+              <div style={{ height: '1px', background: '#444', margin: '4px 0' }} />
+              <div style={{ padding: '8px 12px', cursor: 'pointer', fontSize: '12px', color: '#fff', borderRadius: '2px' }} onMouseEnter={(e) => e.currentTarget.style.background = '#333'} onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'} onClick={() => { onAddFxPlugin?.('delay3'); setMenuPos(null); }}>Time Warp Delay</div>
+              <div style={{ padding: '8px 12px', cursor: 'pointer', fontSize: '12px', color: '#fff', borderRadius: '2px' }} onMouseEnter={(e) => e.currentTarget.style.background = '#333'} onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'} onClick={() => { onAddFxPlugin?.('eq2'); setMenuPos(null); }}>Spectrum EQ</div>
+              <div style={{ padding: '8px 12px', cursor: 'pointer', fontSize: '12px', color: '#fff', borderRadius: '2px' }} onMouseEnter={(e) => e.currentTarget.style.background = '#333'} onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'} onClick={() => { onAddFxPlugin?.('maximus'); setMenuPos(null); }}>Titan Multiband</div>
+              <div style={{ padding: '8px 12px', cursor: 'pointer', fontSize: '12px', color: '#fff', borderRadius: '2px' }} onMouseEnter={(e) => e.currentTarget.style.background = '#333'} onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'} onClick={() => { onAddFxPlugin?.('vocodex'); setMenuPos(null); }}>RoboVox</div>
+              <div style={{ padding: '8px 12px', cursor: 'pointer', fontSize: '12px', color: '#fff', borderRadius: '2px' }} onMouseEnter={(e) => e.currentTarget.style.background = '#333'} onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'} onClick={() => { onAddFxPlugin?.('grossbeat'); setMenuPos(null); }}>Time Bender</div>
+              <div style={{ padding: '8px 12px', cursor: 'pointer', fontSize: '12px', color: '#fff', borderRadius: '2px' }} onMouseEnter={(e) => e.currentTarget.style.background = '#333'} onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'} onClick={() => { onAddFxPlugin?.('edison'); setMenuPos(null); }}>Wave Editor</div>
+              <div style={{ padding: '8px 12px', cursor: 'pointer', fontSize: '12px', color: '#fff', borderRadius: '2px' }} onMouseEnter={(e) => e.currentTarget.style.background = '#333'} onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'} onClick={() => { onAddFxPlugin?.('patcher'); setMenuPos(null); }}>Node Router</div>
+              <div style={{ height: '1px', background: '#444', margin: '4px 0' }} />
+              <div style={{ padding: '8px 12px', cursor: 'pointer', fontSize: '12px', color: '#fff', borderRadius: '2px' }} onMouseEnter={(e) => e.currentTarget.style.background = '#333'} onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'} onClick={() => { onAddFxPlugin?.('vst'); setMenuPos(null); }}>VST Effect (Custom)</div>
+            </div>
+          )}
+
+          <div 
             style={{ padding: '8px 12px', cursor: 'pointer', fontSize: '12px', color: '#fff', display: 'flex', alignItems: 'center', gap: '8px', borderRadius: '2px' }}
-            onMouseEnter={(e) => e.currentTarget.style.background = '#333'}
-            onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+            onMouseEnter={(e) => { e.currentTarget.style.background = '#333'; setShowStockSubmenu(false); }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
             onClick={() => { onShowFxPanel(); setMenuPos(null); }}
           >
-            <i className="bx bx-slider-alt" /> Add Effects (VST)
+            <i className="bx bx-window-open" /> View FX Panel
           </div>
           <div 
             style={{ padding: '8px 12px', cursor: 'pointer', fontSize: '12px', color: '#fff', display: 'flex', alignItems: 'center', gap: '8px', borderRadius: '2px' }}
@@ -254,7 +315,8 @@ function TrackItem({
           >
             <i className="bx bx-trash" /> Delete Track
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   )
