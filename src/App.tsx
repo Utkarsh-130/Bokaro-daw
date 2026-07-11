@@ -588,87 +588,7 @@ export default function App() {
     })
   }
 
-  const playFluxTone = (ctx: AudioContext, freq: number, duration: number, trackId: string, startTime = ctx.currentTime) => {
-    const gainNode = ctx.createGain()
-    routeAudioNode(gainNode, trackId)
 
-    // Subtractive synthesis: 3 detuned sawtooths
-    const oscs: OscillatorNode[] = []
-    const detunes = [-12, 0, 12]
-    detunes.forEach(detune => {
-      const osc = ctx.createOscillator()
-      osc.type = 'sawtooth'
-      osc.frequency.setValueAtTime(freq, startTime)
-      osc.detune.setValueAtTime(detune, startTime)
-      const oscGain = ctx.createGain()
-      oscGain.gain.value = 0.3
-      osc.connect(oscGain)
-      oscGain.connect(gainNode)
-      oscs.push(osc)
-    })
-
-    // Lowpass filter
-    const filter = ctx.createBiquadFilter()
-    filter.type = 'lowpass'
-    filter.frequency.setValueAtTime(freq * 3, startTime)
-    filter.Q.value = 3
-    filter.connect(gainNode)
-
-    oscs.forEach(osc => osc.disconnect())
-    oscs.forEach(osc => osc.connect(filter))
-
-    // ADSR Envelope
-    gainNode.gain.setValueAtTime(0, startTime)
-    gainNode.gain.linearRampToValueAtTime(0.4, startTime + 0.05)
-    gainNode.gain.exponentialRampToValueAtTime(0.2, startTime + 0.3)
-    gainNode.gain.exponentialRampToValueAtTime(0.0001, startTime + duration)
-
-    oscs.forEach(osc => {
-      osc.start(startTime)
-      osc.stop(startTime + duration)
-    })
-  }
-
-  const playCygnusTone = (ctx: AudioContext, freq: number, duration: number, trackId: string, startTime = ctx.currentTime) => {
-    const gainNode = ctx.createGain()
-    routeAudioNode(gainNode, trackId)
-
-    // 3-Operator FM Synthesis
-    const carrier = ctx.createOscillator()
-    carrier.type = 'sine'
-    carrier.frequency.setValueAtTime(freq, startTime)
-
-    const mod1 = ctx.createOscillator()
-    mod1.type = 'sine'
-    mod1.frequency.setValueAtTime(freq * 2, startTime) // Ratio 2:1
-    const mod1Gain = ctx.createGain()
-    mod1Gain.gain.setValueAtTime(freq * 3, startTime) // Modulation index
-    mod1.connect(mod1Gain)
-
-    const mod2 = ctx.createOscillator()
-    mod2.type = 'sine'
-    mod2.frequency.setValueAtTime(freq * 0.5, startTime) // Sub ratio
-    const mod2Gain = ctx.createGain()
-    mod2Gain.gain.setValueAtTime(freq * 1.5, startTime)
-    mod2.connect(mod2Gain)
-
-    // FM Routing: mod2 -> mod1 -> carrier
-    mod2Gain.connect(mod1.frequency)
-    mod1Gain.connect(carrier.frequency)
-    
-    carrier.connect(gainNode)
-
-    gainNode.gain.setValueAtTime(0, startTime)
-    gainNode.gain.linearRampToValueAtTime(0.3, startTime + 0.1)
-    gainNode.gain.exponentialRampToValueAtTime(0.0001, startTime + duration)
-
-    mod2.start(startTime)
-    mod2.stop(startTime + duration)
-    mod1.start(startTime)
-    mod1.stop(startTime + duration)
-    carrier.start(startTime)
-    carrier.stop(startTime + duration)
-  }
 
   const playTone = (freq: number, type: string, duration: number, isAutoScheduled = false, trackId = activeTrackId) => {
     initAudioCtx()
@@ -854,12 +774,7 @@ export default function App() {
               if (ev.type === 'tone' && track?.type === 'autogun') {
                 initAudioCtx()
                 if (audioCtxRef.current && track) playAuraSynthTone(audioCtxRef.current, ev.data.freq, ev.data.duration, track)
-              } else if (ev.type === 'tone' && track?.type === 'flux') {
-                initAudioCtx()
-                if (audioCtxRef.current && track) playFluxTone(audioCtxRef.current, ev.data.freq, ev.data.duration, tId)
-              } else if (ev.type === 'tone' && track?.type === 'cygnus') {
-                initAudioCtx()
-                if (audioCtxRef.current && track) playCygnusTone(audioCtxRef.current, ev.data.freq, ev.data.duration, tId)
+
               } else if (ev.type === 'tone') {
                 playTone(ev.data.freq, synthInstrument, ev.data.duration, true, tId)
               } else if (ev.type === 'drum') {
@@ -1222,12 +1137,7 @@ export default function App() {
     if (track && track.type === 'autogun') {
       initAudioCtx()
       if (audioCtxRef.current) playAuraSynthTone(audioCtxRef.current, freq, 0.5, track)
-    } else if (track && track.type === 'flux') {
-      initAudioCtx()
-      if (audioCtxRef.current) playFluxTone(audioCtxRef.current, freq, 0.5, track.id)
-    } else if (track && track.type === 'cygnus') {
-      initAudioCtx()
-      if (audioCtxRef.current) playCygnusTone(audioCtxRef.current, freq, 0.5, track.id)
+
     } else {
       playTone(freq, synthInstrument, 0.5)
     }
@@ -1311,12 +1221,7 @@ export default function App() {
       if (track && track.type === 'autogun') {
         initAudioCtx()
         if (audioCtxRef.current) playAuraSynthTone(audioCtxRef.current, freq, 0.8, track)
-      } else if (track && track.type === 'flux') {
-        initAudioCtx()
-        if (audioCtxRef.current) playFluxTone(audioCtxRef.current, freq, 0.8, track.id)
-      } else if (track && track.type === 'cygnus') {
-        initAudioCtx()
-        if (audioCtxRef.current) playCygnusTone(audioCtxRef.current, freq, 0.8, track.id)
+
       } else {
         playTone(freq, synthInstrument, 0.8)
       }
@@ -2070,20 +1975,7 @@ export default function App() {
           </div>
           <i className="bx bx-slider-alt modal-item-action" />
         </div>
-        <div className="modal-item" onClick={() => handleAddTrackWithType('flex')}>
-          <div className="modal-item-info">
-            <span className="modal-item-title">Flex (Sample Workstation)</span>
-            <span className="modal-item-desc">Modern subtractive synthesis powered by high-quality samples</span>
-          </div>
-          <i className="bx bx-layer modal-item-action" />
-        </div>
-        <div className="modal-item" onClick={() => handleAddTrackWithType('sytrus')}>
-          <div className="modal-item-info">
-            <span className="modal-item-title">Sytrus (FM Synthesizer)</span>
-            <span className="modal-item-desc">Complex 6-operator hybrid FM and subtractive synthesis</span>
-          </div>
-          <i className="bx bx-network-chart modal-item-action" />
-        </div>
+
         <div className="modal-item" onClick={() => handleAddTrackWithType('audio')}>
           <div className="modal-item-info">
             <span className="modal-item-title">Vocal Recorder Track</span>

@@ -12,6 +12,12 @@ try:
 except:
     g2p_engine = None
 
+try:
+    import pykakasi
+    kakasi = pykakasi.kakasi()
+except:
+    kakasi = None
+
 VOWELS = {'A', '{', '@', 'O', 'aU', 'aI', 'OI', 'E', 'e', 'I', 'i', 'U', 'u', '3'}
 
 ARPABET_TO_TETO = {
@@ -24,20 +30,59 @@ ARPABET_TO_TETO = {
     'Y': 'j', 'Z': 'z', 'ZH': 'Z'
 }
 
-def get_phonemes(text):
-    if any('\u3040' <= c <= '\u30ff' for c in text): return [c for c in text if '\u3040' <= c <= '\u30ff']
-    if not g2p_engine: return []
-    try: raw = g2p_engine(text)
-    except: return []
-    phones = [ARPABET_TO_TETO.get(re.sub(r'\d+', '', p), p) for p in raw if p != ' ']
-    if not phones: return []
-    chain = [f"- {phones[0]}"]
-    for i in range(len(phones) - 1):
-        p1, p2 = phones[i], phones[i+1]
-        if p2 in VOWELS: chain.append(f"{p1}{p2}")
-        else: chain.append(f"{p1} {p2}")
-    chain.append(f"{phones[-1]} -")
-    return chain
+def get_phonemes(text, oto):
+    is_japanese = any('\u3040' <= c <= '\u9fff' or '\uFF00' <= c <= '\uFFEF' for c in text)
+    if is_japanese and kakasi:
+        converted = kakasi.convert(text)
+        hira = "".join([item['hira'] for item in converted])
+        phones = []
+        i = 0
+        small = set('ぁぃぅぇぉゃゅょゎァィゥェォャュョヮ')
+        while i < len(hira):
+            c = hira[i]
+            if i + 1 < len(hira) and hira[i+1] in small:
+                phones.append(c + hira[i+1])
+                i += 2
+            else:
+                phones.append(c)
+                i += 1
+        return phones
+    elif is_japanese:
+        hira = "".join([c for c in text if '\u3040' <= c <= '\u30ff'])
+        phones = []
+        i = 0
+        small = set('ぁぃぅぇぉゃゅょゎァィゥェォャュョヮ')
+        while i < len(hira):
+            c = hira[i]
+            if i + 1 < len(hira) and hira[i+1] in small:
+                phones.append(c + hira[i+1])
+                i += 2
+            else:
+                phones.append(c)
+                i += 1
+        return phones
+        
+    words = text.split()
+    valid_words = [w for w in words if w in oto or w.lower() in oto]
+    if len(valid_words) == len(words) and len(words) > 0:
+        return words
+        
+    if g2p_engine:
+        try:
+            raw = g2p_engine(text)
+            phones = [ARPABET_TO_TETO.get(re.sub(r'\d+', '', p), p) for p in raw if p != ' ']
+            if phones:
+                chain = [f"- {phones[0]}"]
+                for i in range(len(phones) - 1):
+                    p1, p2 = phones[i], phones[i+1]
+                    if p2 in VOWELS: chain.append(f"{p1}{p2}")
+                    else: chain.append(f"{p1} {p2}")
+                chain.append(f"{phones[-1]} -")
+                return chain
+        except:
+            pass
+            
+    return words if words else list(text)
 
 def load_oto(vb_path):
     oto_map = {}
@@ -97,7 +142,7 @@ def crossfade(d1, d2, ov):
 def synthesize(text, vb_path, out_path, speed, pitch):
     try:
         oto = load_oto(vb_path)
-        phones = get_phonemes(text)
+        phones = get_phonemes(text, oto)
         out_params, final = None, b''
         ratio = speed * pitch
         for p in phones:
@@ -161,7 +206,7 @@ def synthesize_sequence(notes, vb_path, out_path, speed_mult, pitch_mult, base_f
             pitch_ratio = (note_freq / base_freq) * pitch_mult
             ratio = speed_mult * pitch_ratio
             
-            phones = get_phonemes(lyric)
+            phones = get_phonemes(lyric, oto)
             final = b''
             for p in phones:
                 entry = oto.get(p)

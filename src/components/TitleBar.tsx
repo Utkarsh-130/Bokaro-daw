@@ -29,15 +29,7 @@ export default function TitleBar() {
     <div className="title-bar">
       <div className="title-bar-drag" />
 
-      <div className="title-bar-brand">
-        <svg className="title-bar-logo" width="18" height="18" viewBox="0 0 24 24" fill="none">
-          <circle cx="12" cy="12" r="10" stroke="var(--accent)" strokeWidth="1.5" />
-          <path d="M8 12 Q10 6 12 12 Q14 18 16 12" stroke="var(--accent)" strokeWidth="1.5" strokeLinecap="round" fill="none" />
-          <circle cx="12" cy="12" r="2" fill="var(--accent)" />
-        </svg>
-        <span className="title-bar-name">Bokaro <span className="title-bar-name-accent">DAW</span></span>
-        <span className="title-bar-version">v1.0</span>
-      </div>
+
 
       <div className="title-bar-controls">
         <button className="wc-btn wc-minimize" onClick={minimize} title="Minimize">

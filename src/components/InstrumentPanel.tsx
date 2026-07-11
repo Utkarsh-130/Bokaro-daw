@@ -3,6 +3,8 @@ import Knob from './Knob.tsx'
 import { VstPanel } from './VstPanel.tsx'
 
 interface InstrumentPanelProps {
+  tracks?: any[]
+  setTracks?: React.Dispatch<React.SetStateAction<any[]>>
   trackType: string
   synthInstrument: string
   setSynthInstrument: (val: string) => void
@@ -26,6 +28,58 @@ interface InstrumentPanelProps {
   setTrackAudioUrls?: React.Dispatch<React.SetStateAction<Record<string, string>>>
   setMidiEvents?: React.Dispatch<React.SetStateAction<any[]>>
   vocaloidFolder?: string
+}
+
+function PianoRoll({ onPlay }: { onPlay: (noteName: string, oct: number, semis: number) => void }) {
+  const octaves = [
+    { oct: 3, keys: [
+      { semis: 0, type: 'white', noteName: 'C3', map: 'z' },
+      { semis: 1, type: 'black', noteName: 'C#3', map: 's' },
+      { semis: 2, type: 'white', noteName: 'D3', map: 'x' },
+      { semis: 3, type: 'black', noteName: 'D#3', map: 'd' },
+      { semis: 4, type: 'white', noteName: 'E3', map: 'c' },
+      { semis: 5, type: 'white', noteName: 'F3', map: 'v' },
+      { semis: 6, type: 'black', noteName: 'F#3', map: 'g' },
+      { semis: 7, type: 'white', noteName: 'G3', map: 'b' },
+      { semis: 8, type: 'black', noteName: 'G#3', map: 'h' },
+      { semis: 9, type: 'white', noteName: 'A3', map: 'n' },
+      { semis: 10, type: 'black', noteName: 'A#3', map: 'j' },
+      { semis: 11, type: 'white', noteName: 'B3', map: 'm' }
+    ] },
+    { oct: 4, keys: [
+      { semis: 0, type: 'white', noteName: 'C4', map: 'q' },
+      { semis: 1, type: 'black', noteName: 'C#4', map: '2' },
+      { semis: 2, type: 'white', noteName: 'D4', map: 'w' },
+      { semis: 3, type: 'black', noteName: 'D#4', map: '3' },
+      { semis: 4, type: 'white', noteName: 'E4', map: 'e' },
+      { semis: 5, type: 'white', noteName: 'F4', map: 'r' },
+      { semis: 6, type: 'black', noteName: 'F#4', map: '5' },
+      { semis: 7, type: 'white', noteName: 'G4', map: 't' },
+      { semis: 8, type: 'black', noteName: 'G#4', map: '6' },
+      { semis: 9, type: 'white', noteName: 'A4', map: 'y' },
+      { semis: 10, type: 'black', noteName: 'A#4', map: '7' },
+      { semis: 11, type: 'white', noteName: 'B4', map: 'u' }
+    ] }
+  ]
+  
+  return (
+    <div className="piano-keys" style={{ height: '140px', justifyContent: 'center' }}>
+      {octaves.map((octave) =>
+        octave.keys.map((key) => (
+          <div
+            key={key.noteName}
+            className={`piano-key ${key.type}`}
+            onClick={() => onPlay(key.noteName, octave.oct, key.semis)}
+            style={{
+              height: key.type === 'white' ? '120px' : '80px',
+            }}
+          >
+            <span className="key-label" style={{ fontSize: '10px' }}>{key.map}</span>
+          </div>
+        ))
+      )}
+    </div>
+  )
 }
 
 export default function InstrumentPanel(props: InstrumentPanelProps) {
@@ -69,7 +123,159 @@ export default function InstrumentPanel(props: InstrumentPanelProps) {
   if (trackType === 'vocaloid') {
     return <VocaloidPanel {...props} />
   }
+  if (trackType === 'autogun') {
+    return <AuraSynthPanel {...props} />
+  }
+
   return null
+}
+
+
+
+
+function AuraSynthPanel({ activeTrackId, tracks, setTracks }: any) {
+  const track = tracks?.find((t: any) => t.id === activeTrackId)
+  if (!track) return null
+
+  const preset = track.auraPreset || 1
+  const level = track.auraLevel || 0.8
+  const magic = track.auraMagic || false
+
+  const updateTrack = (updates: any) => {
+    setTracks?.((prev: any) => prev.map((t: any) => t.id === activeTrackId ? { ...t, ...updates } : t))
+  }
+
+  const randomize = () => {
+    updateTrack({ auraPreset: Math.floor(Math.random() * 4294967295) + 1 })
+  }
+
+  const stepPreset = (dir: number) => {
+    let p = preset + dir
+    if (p < 1) p = 4294967295
+    if (p > 4294967295) p = 1
+    updateTrack({ auraPreset: p })
+  }
+
+  return (
+    <div className="panel-view" id="view-aurasynth" style={{ display: 'flex', flexDirection: 'column', width: '100%', gap: '12px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--accent)', fontSize: '13px', fontWeight: 700 }}>
+        <i className="bx bx-slider-alt" /> AuraSynth
+      </div>
+
+      <div style={{ display: 'flex', gap: '20px', alignItems: 'stretch', flexGrow: 1 }}>
+        
+        {/* Main Display Area */}
+        <div style={{ 
+          flex: 1, 
+          background: 'var(--bg-card)', 
+          border: '1px solid var(--border)', 
+          borderRadius: '8px',
+          flexDirection: 'column',
+          alignItems: 'center',
+          gap: '15px',
+          boxShadow: 'inset 0 2px 10px rgba(0,0,0,0.3)'
+        }}>
+          <div style={{ color: 'var(--text-muted)', fontSize: '10px', fontWeight: 700, letterSpacing: '1px' }}>
+            ALGORITHMIC PRESET
+          </div>
+          <div style={{ 
+            display: 'flex', 
+            alignItems: 'center', 
+            gap: '15px',
+            background: '#0a0a0a',
+            borderRadius: '4px',
+            border: '1px solid #222'
+          }}>
+            <i 
+              className="bx bx-chevron-left" 
+              style={{ fontSize: '24px', cursor: 'pointer', color: 'var(--text-muted)' }} 
+              onClick={() => stepPreset(-1)}
+              onMouseEnter={(e) => e.currentTarget.style.color = '#fff'}
+              onMouseLeave={(e) => e.currentTarget.style.color = 'var(--text-muted)'}
+            />
+            <div style={{ 
+              fontFamily: 'monospace', 
+              fontSize: '32px', 
+              color: 'var(--accent)',
+              textShadow: '0 0 10px var(--accent-glow)',
+              letterSpacing: '3px'
+            }}>
+              {preset.toString().padStart(10, '0')}
+            </div>
+            <i 
+              className="bx bx-chevron-right" 
+              style={{ fontSize: '24px', cursor: 'pointer', color: 'var(--text-muted)' }} 
+              onClick={() => stepPreset(1)}
+              onMouseEnter={(e) => e.currentTarget.style.color = '#fff'}
+              onMouseLeave={(e) => e.currentTarget.style.color = 'var(--text-muted)'}
+            />
+          </div>
+          <button
+            onClick={randomize}
+            style={{
+              background: 'transparent',
+              border: '1px solid var(--accent)',
+              color: 'var(--accent)',
+              padding: '6px 24px',
+              borderRadius: '20px',
+              cursor: 'pointer',
+              fontWeight: 600,
+              fontSize: '11px',
+              letterSpacing: '1px',
+              transition: 'all 0.2s'
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--accent)'; e.currentTarget.style.color = '#000'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--accent)'; }}
+          >
+            RANDOMIZE
+          </button>
+        </div>
+
+        {/* Controls Area */}
+        <div style={{ 
+          width: '180px', 
+          background: 'rgba(255,255,255,0.02)', 
+          border: '1px solid rgba(255,255,255,0.08)',
+          borderRadius: '8px',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: '20px'
+        }}>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+            <span style={{ fontSize: '10px', color: 'var(--text-muted)', fontWeight: 600 }}>MASTER LEVEL</span>
+            <Knob 
+              min={0} max={1} 
+              value={level} 
+              onChange={(val) => updateTrack({ auraLevel: val })}
+              displayValue={`${Math.round(level * 100)}%`}
+            />
+          </div>
+
+          <button
+            onClick={() => updateTrack({ auraMagic: !magic })}
+            style={{
+              background: magic ? 'linear-gradient(45deg, #f093fb 0%, #f5576c 100%)' : 'transparent',
+              border: magic ? 'none' : '1px solid var(--border)',
+              color: magic ? '#fff' : 'var(--text-muted)',
+              padding: '8px 30px',
+              borderRadius: '4px',
+              cursor: 'pointer',
+              fontWeight: 800,
+              fontSize: '14px',
+              letterSpacing: '2px',
+              boxShadow: magic ? '0 0 15px rgba(245, 87, 108, 0.4)' : 'none',
+              transition: 'all 0.2s'
+            }}
+          >
+            MAGIC
+          </button>
+        </div>
+
+      </div>
+    </div>
+  )
 }
 
 function AudioPanel({
